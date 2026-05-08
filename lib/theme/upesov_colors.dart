@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 class AppColors {
   const AppColors._();
 
+  static const darkGreen = Color.fromARGB(255, 27, 60, 31);
   static const navGreen = Color(0xFF284C1C);
   static const navFocus = Color (0xFF3D6A39);
   static const navOrange = Color (0xFFC07D59);
