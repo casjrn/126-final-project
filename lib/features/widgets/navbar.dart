@@ -5,6 +5,7 @@ import 'package:upesov/features/pages/dashboard.dart';
 import 'package:upesov/features/pages/wallets.dart';
 import 'package:upesov/features/pages/budget.dart';
 import 'package:upesov/features/pages/manage.dart';
+// Line removed from here!
 
 class CustomNavBar extends StatelessWidget implements PreferredSizeWidget {
   final String currentPage;
@@ -16,14 +17,14 @@ class CustomNavBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 80,
+      height: 70,
       padding: const EdgeInsets.symmetric(horizontal: 24),
       color: AppColors.navGreen,
       child: Row(
         children: [
 
           //==== LOGO & TITLE ====
-          Image.asset('assets/logo_glow.png', width: 50),
+          Image.asset('assets/logo_glow.png', width: 45),
           const SizedBox(width: 15),
           Container(height: 40, width: 1, color: Colors.white24),
           const SizedBox(width: 20),
@@ -53,7 +54,7 @@ class CustomNavBar extends StatelessWidget implements PreferredSizeWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: TextButton(
         onPressed: () {
-          // Use pushReplacement so you don't create an infinite "back" stack on web
+          // ---- pushReplacement to not create an infinite "back" stack on web ----
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => destination),
