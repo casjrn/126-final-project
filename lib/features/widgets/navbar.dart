@@ -5,8 +5,6 @@ import 'package:upesov/features/pages/dashboard.dart';
 import 'package:upesov/features/pages/wallets.dart';
 import 'package:upesov/features/pages/budget.dart';
 import 'package:upesov/features/pages/manage.dart';
-// Line removed from here!
-
 class CustomNavBar extends StatelessWidget implements PreferredSizeWidget {
   final String currentPage;
   const CustomNavBar({super.key, required this.currentPage});
