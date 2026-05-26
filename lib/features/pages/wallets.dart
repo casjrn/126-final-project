@@ -11,6 +11,7 @@
     return WalletsPage();
   }
 
+//===== BACKEND =====
   class WalletsPage extends StatefulWidget{
     const WalletsPage({super.key});
 
@@ -46,10 +47,11 @@ class _WalletsPageState extends State<WalletsPage> {
       appBar: const CustomNavBar(currentPage: 'WALLETS'),
       body: Row(
         children: [
+
           // ===== LEFT AREA: MAIN CONTENT (75% width via flex: 3) =====
           Expanded(
             flex: 3,
-            child: SingleChildScrollView( // Prevents UI vertical clipping
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,8 +84,8 @@ class _WalletsPageState extends State<WalletsPage> {
                   const SizedBox(height: 15),
 
                   Wrap(
-                    spacing: 15,    // Horizontal gaps between items
-                    runSpacing: 15, // Vertical gaps between implicitly wrapped rows
+                    spacing: 15,
+                    runSpacing: 15,
                     alignment: WrapAlignment.start,
                     children: _myWallets.map((wallet) {
                       return Card(
@@ -174,79 +176,3 @@ class _WalletsPageState extends State<WalletsPage> {
     );
   }
 }
-
-/*
-  class WalletsPage extends StatelessWidget {
-    @override
-    Widget build(BuildContext context) {
-      return Scaffold(
-        backgroundColor: AppColors.background,
-
-        appBar: const CustomNavBar(currentPage: 'WALLETS'), 
-
-        body: Row(
-          children: [
-
-            //===== MAIN CONTENT =====
-            Expanded(
-              flex: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-
-                  //Total balance container
-                  Container(
-                    width: 550,
-                    height: 136,
-                    color: AppColors.infoContainer1,
-                    child: const Center(
-                      child: Text(
-                        'Total Balance: 00.00', // Placeholder for total balance
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  //Wallets
-                  Container(
-
-                  )
-                ]
-              )
-            ),
-
-            Expanded(
-              flex: 3,
-              child: Column(
-                children: [
-                  
-                ]
-              )
-            ),
-
-          //Recent logs container
-          Container(
-            width: MediaQuery.of(context).size.width * 0.25,
-            height: double.infinity,
-            color: AppColors.infoContainer1,
-            child: const Center(
-              child: Text(
-                'Recent Logs:',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              )
-            )
-          )
-          ],
-          ),
-        
-      );
-    }
-  }*/
