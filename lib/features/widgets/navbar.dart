@@ -24,7 +24,7 @@ class CustomNavBar extends StatelessWidget implements PreferredSizeWidget {
         children: [
 
           //==== LOGO & TITLE ====
-          Image.asset('assets/logo_glow.png', width: 45),
+          Image.asset('lib/assets/logo_glow.png', width: 45),
           const SizedBox(width: 15),
           Container(height: 40, width: 1, color: Colors.white24),
           const SizedBox(width: 20),
