@@ -37,6 +37,7 @@ dependencies:
 
   # Charts dependencies for summaries (pie charts)
   fl_chart: ^1.2.0
+  supabase_flutter: ^2.12.4
 
 dev_dependencies:
   flutter_test:
