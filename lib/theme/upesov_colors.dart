@@ -15,4 +15,9 @@ class AppColors {
   static const buttonOlive = Color (0xFF53533A);
   static const buttonBlue = Color (0xFF3d4b65);
   static const buttonGray = Color (0xFF5D5D5D);
+
+  static const Color primaryText = Color(0xFF2D3142); // Deep navy-grey for readability
+  static const Color secondaryText = Color(0xFF9094A6); // Soft grey for labels
+  static const Color borderColor = Color(0xFFD1D5DB); // Subtle borders
+  static const Color cardBg = Color(0xFFFDF6EC);
 }
