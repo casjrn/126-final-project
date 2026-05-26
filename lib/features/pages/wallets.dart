@@ -1,4 +1,5 @@
   import 'package:flutter/material.dart';
+  //import 'package:flutter/gestures.dart';
   import 'package:upesov/theme/upesov_theme.dart';
   import 'package:upesov/features/widgets/navbar.dart';
   import 'package:upesov/features/model/user_wallets.dart';
@@ -10,7 +11,6 @@
     return WalletsPage();
   }
 
-//BACKEND LOGIC
   class WalletsPage extends StatefulWidget{
     const WalletsPage({super.key});
 
@@ -21,14 +21,9 @@
 class _WalletsPageState extends State<WalletsPage> {
   // 2. Initial state configuration holding current data entries
   final List<UserWallets> _myWallets = [
-    UserWallets(name: "Cash", balance: 0.0, type: "Cash"),
-    UserWallets(name: "GCash", balance: 0.0, type: "GCash"),
+    UserWallets(name: "GCash", balance: 1500.0, type: "Cash"),
+    UserWallets(name: "BPI", balance: 25000.0, type: "Bank Account"),
   ];
-
-  // DYNAMIC BALANCE CALCULATOR
-  double get _totalBalance {
-    return _myWallets.fold(0.0, (sum, wallet) => sum + wallet.balance);
-  }
 
   // 3. Trigger tracking logic to append objects on command
   void _addNewWallet() {
@@ -59,26 +54,14 @@ class _WalletsPageState extends State<WalletsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
                   // Total balance container
                   Container(
                     width: 250,
                     height: 100,
-                    margin: const EdgeInsets.only(top: 15.0, bottom: 15.0), 
-                    decoration: BoxDecoration(
-                      color: AppColors.infoContainer1,
-                      borderRadius: BorderRadius.circular(20.0),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black,
-                          blurRadius: 8.0,                       
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
+                    color: AppColors.infoContainer1,
                     child: const Center(
                       child: Text(
-                        'Total Balance: ₱${_totalBalance.toStringAsFixed(2)}',
+                        'Total Balance: 00.00',
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -191,3 +174,79 @@ class _WalletsPageState extends State<WalletsPage> {
     );
   }
 }
+
+/*
+  class WalletsPage extends StatelessWidget {
+    @override
+    Widget build(BuildContext context) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+
+        appBar: const CustomNavBar(currentPage: 'WALLETS'), 
+
+        body: Row(
+          children: [
+
+            //===== MAIN CONTENT =====
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+
+                  //Total balance container
+                  Container(
+                    width: 550,
+                    height: 136,
+                    color: AppColors.infoContainer1,
+                    child: const Center(
+                      child: Text(
+                        'Total Balance: 00.00', // Placeholder for total balance
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  //Wallets
+                  Container(
+
+                  )
+                ]
+              )
+            ),
+
+            Expanded(
+              flex: 3,
+              child: Column(
+                children: [
+                  
+                ]
+              )
+            ),
+
+          //Recent logs container
+          Container(
+            width: MediaQuery.of(context).size.width * 0.25,
+            height: double.infinity,
+            color: AppColors.infoContainer1,
+            child: const Center(
+              child: Text(
+                'Recent Logs:',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              )
+            )
+          )
+          ],
+          ),
+        
+      );
+    }
+  }*/
