@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:upesov/theme/upesov_theme.dart';
 import 'package:upesov/features/pages/landing_page.dart';
-void main() {
+import 'package:supabase_flutter/supabase_flutter.dart';
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 4. Initialize Supabase
+  await Supabase.initialize(
+    url: 'https://zcmbtclypnsbsxfpfgmk.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjbWJ0Y2x5cG5zYnN4ZnBmZ21rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NjQwMDUsImV4cCI6MjA5MTI0MDAwNX0.OXPwbU8omslvmeRX66idiiKZHGQbxPS75T-htLZOEL4',
+  );
+
   runApp(const MyApp());
 }
 
@@ -24,4 +33,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
