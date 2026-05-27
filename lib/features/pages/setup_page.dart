@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:provider/provider.dart'; 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:upesov/features/pages/login_page.dart';
 import 'package:upesov/features/pages/dashboard.dart';
 import 'package:upesov/theme/upesov_theme.dart';
-import 'package:upesov/services/wallet_service.dart';
 import 'package:upesov/services/goal_service.dart';
+import 'package:upesov/providers/wallet_provider.dart';
 
 class SetUpPage extends StatefulWidget {
   const SetUpPage({super.key});
@@ -15,12 +16,9 @@ class SetUpPage extends StatefulWidget {
 }
 
 class _SetUpPageState extends State<SetUpPage> {
-  // Controllers for the input fields
   final _balanceController = TextEditingController();
   final _savingsController = TextEditingController();
 
-  // Instantiate the specialized services
-  final WalletService _walletService = WalletService();
   final GoalService _goalService = GoalService();
 
   bool _isLoading = false;
@@ -29,7 +27,6 @@ class _SetUpPageState extends State<SetUpPage> {
   Future<void> _handleSetupSubmit() async {
     final user = Supabase.instance.client.auth.currentUser;
     
-    // Validation
     if (user == null) {
       setState(() => _errorMessage = "User not found. Please log in again.");
       return;
@@ -57,21 +54,23 @@ class _SetUpPageState extends State<SetUpPage> {
     });
 
     try {
-      // COORDINATION: Call both services
-      await _walletService.createInitialWallet(userId: user.id, balance: balance);
+      await context.read<WalletProvider>().addWallet(
+        userId: user.id,
+        name: 'Physical Wallet', 
+        type: 'Cash',            
+        balance: balance,
+      );
+
       await _goalService.createInitialGoal(userId: user.id, target: savings);
 
       if (!mounted) return;
 
-      // SUCCESS: Move to Dashboard
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const DashboardPage()),
       );
-    } on PostgrestException catch (e) {
-      setState(() => _errorMessage = e.message);
     } catch (e) {
-      setState(() => _errorMessage = "Something went wrong. Please try again.");
+      setState(() => _errorMessage = "Error: ${e.toString()}");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -90,7 +89,6 @@ class _SetUpPageState extends State<SetUpPage> {
       backgroundColor: AppColors.darkGreen,
       body: Row(
         children: [
-          // Left Side: Branding
           Expanded(
             flex: 1,
             child: Container(
@@ -100,7 +98,6 @@ class _SetUpPageState extends State<SetUpPage> {
               ),
             ),
           ),
-          // Right Side: Form
           Expanded(
             flex: 1,
             child: Container(
@@ -121,14 +118,17 @@ class _SetUpPageState extends State<SetUpPage> {
                   const SizedBox(height: 20),
                   _buildLabel("How much do you want to save per week?"),
                   _buildNumericField(_savingsController, '0.00'),
-                  
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 15),
                     Text(_errorMessage!, style: TextStyle(color: Colors.redAccent[100])),
                   ],
-                  
                   const SizedBox(height: 30),
                   _buildSubmitButton(),
+                  
+                  // --- INTEGRATED SKIP BUTTON ---
+                  const SizedBox(height: 12),
+                  _buildSkipButton(),
+                  
                   const SizedBox(height: 20),
                   _buildLoginLink(),
                 ],
@@ -139,8 +139,6 @@ class _SetUpPageState extends State<SetUpPage> {
       ),
     );
   }
-
-  // --- UI Helper Widgets ---
 
   Widget _buildLabel(String text) => Align(
     alignment: Alignment.centerLeft,
@@ -170,6 +168,26 @@ class _SetUpPageState extends State<SetUpPage> {
       child: _isLoading 
         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
         : const Text('Next', style: TextStyle(fontWeight: FontWeight.bold)),
+    ),
+  );
+
+  // NEW: Skip Button Implementation
+  Widget _buildSkipButton() => TextButton(
+    onPressed: () {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const DashboardPage()),
+      );
+    },
+    style: TextButton.styleFrom(
+      foregroundColor: Colors.white.withOpacity(0.7),
+    ),
+    child: const Text(
+      "Skip for now",
+      style: TextStyle(
+        decoration: TextDecoration.underline,
+        fontSize: 14,
+      ),
     ),
   );
 
