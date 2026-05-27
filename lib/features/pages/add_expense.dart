@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:upesov/theme/upesov_theme.dart';
 
 class AddExpenseBox extends StatefulWidget {
-  final Map<String, dynamic>? initialData; // Added for editing
+  final Map<String, dynamic>? initialData; 
 
   const AddExpenseBox({super.key, this.initialData});
 
@@ -21,10 +21,11 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
   late TextEditingController _amountController;
   late TextEditingController _itemController;
 
+
   @override
   void initState() {
     super.initState();
-    // Pre-fill fields if initialData is provided, else use defaults
+   
     selectedDate = widget.initialData?['date'] ?? DateTime.now();
     selectedCategory = widget.initialData?['category'];
     selectedWallet = widget.initialData?['wallet'];
@@ -46,7 +47,6 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
       initialDate: selectedDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2101),
-      // Apply your theme colors to the picker if needed
     );
     if (picked != null && picked != selectedDate) {
       setState(() => selectedDate = picked);
@@ -69,7 +69,6 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
 
   @override
   Widget build(BuildContext context) {
-    // Determine title based on mode
     final String dialogTitle = widget.initialData == null ? 'Add Expense' : 'Edit Expense';
 
     return Dialog(
@@ -82,7 +81,7 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(dialogTitle), // Pass title
+            _buildHeader(dialogTitle),
             const SizedBox(height: 12),
             const Text('MAIN ENTRY FORM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.secondaryText)),
             const SizedBox(height: 24),
@@ -107,7 +106,6 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(title, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
-        // ... (rest of header widget is the same)
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(border: Border.all(color: AppColors.borderColor), borderRadius: BorderRadius.circular(12)),
@@ -128,9 +126,6 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
       ],
     );
   }
-
-  // ... (All helper widgets like _buildEntryForm, _buildTextField, _buildDropdown, etc. stay exactly the same)
-  // Just ensure _buildActionButtons uses "Save Log" or "Update Log" if you want to be fancy.
 
   Widget _buildSidebarSection() {
     bool isMissingFields = _showErrors && (_amountController.text.isEmpty || selectedCategory == null || selectedWallet == null);
@@ -346,7 +341,6 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
     );
   }
 
-  // save and cancel buttons
   Widget _buildActionButtons(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
