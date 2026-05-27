@@ -93,14 +93,11 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
             const SizedBox(height: 12),
             const Text('MAIN ENTRY FORM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.secondaryText)),
             const SizedBox(height: 24),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 3, child: _buildEntryForm()),
-                const SizedBox(width: 40),
-                Expanded(flex: 2, child: _buildSidebarSection()),
-              ],
-            ),
+
+            _buildEntryForm(),
+            const SizedBox(width: 40),
+            _buildSidebarSection(),
+
             const SizedBox(height: 32),
             _buildActionButtons(context),
           ],
@@ -347,44 +344,6 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
       ],
     );
   }
-
-  /*Widget _buildBudgetFeedback() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.5), border: Border.all(color: AppColors.borderColor), borderRadius: BorderRadius.circular(15)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Live Budget Feedback', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText)),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              SizedBox(
-                height: 100, width: 100,
-                child: PieChart(PieChartData(sectionsSpace: 2, centerSpaceRadius: 30, sections: [
-                  PieChartSectionData(color: AppColors.navOrange, value: 70, radius: 15, showTitle: false),
-                  PieChartSectionData(color: AppColors.buttonBlue, value: 30, radius: 15, showTitle: false),
-                ])),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(selectedCategory?.toUpperCase() ?? 'CATEGORY', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.secondaryText)),
-                    const Text('Budget: ₱0.00', style: TextStyle(fontSize: 11, color: AppColors.primaryText)),
-                    const SizedBox(height: 4),
-                    const Text('After this expense:', style: TextStyle(fontSize: 10, color: AppColors.secondaryText)),
-                    const Text('0%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
-                  ],
-                ),
-              )
-            ],
-          ),
-        ],
-      ),
-    );
-  }*/
 
   Widget _buildActionButtons(BuildContext context) {
     return Row(
