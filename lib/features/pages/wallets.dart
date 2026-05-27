@@ -1,13 +1,95 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:upesov/theme/upesov_theme.dart';
 import 'package:upesov/features/widgets/navbar.dart';
-import 'package:upesov/features/model/user_wallets.dart';
-import 'package:flutter/widget_previews.dart';
+import 'package:upesov/providers/wallet_provider.dart';
 
-@Preview(name: 'Wallets Layout Preview')
-Widget previewWallets() {
-  return const WalletsPage();
+// ==========================================
+// 1. LOGIC LAYER (CONTROLLER)
+// ==========================================
+
+class WalletsController {
+  final State state;
+  WalletsController(this.state);
+
+  BuildContext get context => state.context;
+
+  // Data State
+  final List<String> logs = [];
+  String? errorMessage;
+
+  void init() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (state.mounted) {
+        context.read<WalletProvider>().refresh();
+      }
+    });
+  }
+
+  // Formatting Logic
+  String formatCurrency(double v) {
+    return v.toStringAsFixed(2).replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+$)'), 
+      (m) => '${m[1]},'
+    );
+  }
+
+  void clearError() {
+    // ignore: invalid_use_of_protected_member
+    state.setState(() => errorMessage = null);
+  }
+
+  void setError(String error) {
+    // ignore: invalid_use_of_protected_member
+    state.setState(() => errorMessage = error);
+  }
+
+  // Logic Actions
+  Future<void> addWallet({required String name, required String type, required double balance}) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      await context.read<WalletProvider>().addWallet(
+        userId: user.id,
+        name: name,
+        type: type,
+        balance: balance,
+      );
+      _updateLogs('Added ₱${formatCurrency(balance)} to $name');
+    }
+  }
+
+  Future<void> topUp({required Map<String, dynamic> wallet, required double amount}) async {
+    await context.read<WalletProvider>().addMoney(
+      wallet['wallet_id'].toString(),
+      (wallet['wallet_balance'] ?? 0.0) as double,
+      amount,
+    );
+    _updateLogs('Topped up ${wallet['wallet_name']} +₱${formatCurrency(amount)}');
+  }
+
+  Future<void> transfer({
+    required Map<String, dynamic> from,
+    required Map<String, dynamic> to,
+    required double amount,
+  }) async {
+    await context.read<WalletProvider>().transferMoney(
+      fromId: from['wallet_id'].toString(),
+      toId: to['wallet_id'].toString(),
+      amount: amount,
+    );
+    _updateLogs('Transferred ₱${formatCurrency(amount)}: ${from['wallet_name']} ➔ ${to['wallet_name']}');
+  }
+
+  void _updateLogs(String message) {
+    // ignore: invalid_use_of_protected_member
+    state.setState(() => logs.insert(0, message));
+  }
 }
+
+// ==========================================
+// 2. UI LAYER (PAGE)
+// ==========================================
 
 class WalletsPage extends StatefulWidget {
   const WalletsPage({super.key});
@@ -17,83 +99,45 @@ class WalletsPage extends StatefulWidget {
 }
 
 class _WalletsPageState extends State<WalletsPage> {
-  // Initial active data entries
-  final List<UserWallets> _myWallets = [
-    UserWallets(name: "GCash", balance: 1500.0, type: "Cash"),
-    UserWallets(name: "BPI", balance: 25000.0, type: "Bank Account"),
-  ];
+  late final WalletsController _controller;
+  final _formKey = GlobalKey<FormState>();
 
-  // Dynamic live-state sum calculation expression
-  double get _totalBalance {
-    return _myWallets.fold(0.0, (sum, wallet) => sum + wallet.balance);
+  @override
+  void initState() {
+    super.initState();
+    _controller = WalletsController(this);
+    _controller.init();
   }
 
-  // Appends new dynamic entries instantly updating the UI state
-  void _addNewWallet() {
-    final List<Map<String, String>> presets = [
-      {"name": "PayMaya", "type": "Cash"},
-      {"name": "Metrobank", "type": "Bank Account"},
-      {"name": "Pocket Cash", "type": "Cash"},
-    ];
-    final selectedPreset = presets[_myWallets.length % presets.length];
-
-    setState(() {
-      _myWallets.add(
-        UserWallets(
-          name: "${selectedPreset['name']} (${_myWallets.length + 1})",
-          balance: 0.00,
-          type: selectedPreset['type']!,
-        ),
-      );
-    });
-  }
-
-  void _addMoney() {
-    // ScaffoldMessenger alert action placeholder
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Add Money process initiated')),
-    );
-  }
-
-  void _transferMoney() {
-    // ScaffoldMessenger alert action placeholder
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Transfer Money process initiated')),
-    );
-  }
+  // --- Main Build ---
 
   @override
   Widget build(BuildContext context) {
+    final wp = context.watch<WalletProvider>();
+    
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const CustomNavBar(currentPage: 'WALLETS'),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ===== LEFT AREA: MAIN DASHBOARD CONTENT (75%) =====
-              Expanded(
-                flex: 2,
-                child: _buildMainContent(),
-              ),
-              const SizedBox(width: 24),
-
-              // ===== RIGHT AREA: RECENT LOGS SIDEBAR (25%) =====
-              Expanded(
-                flex: 1,
-                child: _buildSidebar(),
-              ),
-            ],
+      body: wp.isLoading 
+        ? const Center(child: CircularProgressIndicator(color: AppColors.primaryText))
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            // Fix: Removed IntrinsicHeight and changed CrossAxisAlignment
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: _buildMainContent(wp.wallets, wp.totalBalance)),
+                const SizedBox(width: 24),
+                Expanded(flex: 1, child: _buildSidebar()),
+              ],
+            ),
           ),
-        ),
-      ),
     );
   }
 
-  // Building Left Operational UI Structure Block
-  Widget _buildMainContent() {
+  // --- UI Components ---
+
+  Widget _buildMainContent(List<Map<String, dynamic>> wallets, double total) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: _cardDecoration(),
@@ -103,7 +147,6 @@ class _WalletsPageState extends State<WalletsPage> {
           _buildSectionHeader("Total Summary"),
           const SizedBox(height: 16),
           
-          // Total Balance display card element block
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -115,19 +158,11 @@ class _WalletsPageState extends State<WalletsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Total Balance Across All Wallets',
-                  style: TextStyle(fontSize: 12, color: AppColors.secondaryText),
-                ),
+                const Text('Total Balance Across All Wallets',
+                  style: TextStyle(fontSize: 12, color: AppColors.secondaryText)),
                 const SizedBox(height: 8),
-                Text(
-                  '₱${_totalBalance.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryText,
-                  ),
-                ),
+                Text('₱${_controller.formatCurrency(total)}',
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
               ],
             ),
           ),
@@ -136,58 +171,41 @@ class _WalletsPageState extends State<WalletsPage> {
           _buildSectionHeader("My Active Wallets"),
           const SizedBox(height: 16),
 
-          // Adaptive fluid wrapping multi-column cards grid section
-          Wrap(
-            spacing: 16,
-            runSpacing: 16,
-            children: _myWallets.map((wallet) => _buildWalletCard(wallet)).toList(),
-          ),
+          wallets.isEmpty 
+            ? const Text("No wallets registered yet.", style: TextStyle(color: AppColors.secondaryText))
+            : Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                children: wallets.map((w) => _buildWalletCard(w)).toList(),
+              ),
+          
           const SizedBox(height: 40),
-
           _buildSectionHeader("Wallet Management Tools"),
           const SizedBox(height: 16),
 
-          // Clean Horizontal Core Operational Control Row Button Row Layout
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
             children: [
-              _buildActionButton(Icons.account_balance_wallet, "Add Wallet", _addNewWallet),
-              const SizedBox(width: 12),
-              _buildActionButton(Icons.add_card, "Add Money", _addMoney),
-              const SizedBox(width: 12),
-              _buildActionButton(Icons.swap_horiz, "Transfer Money", _transferMoney),
+              _buildActionButton(Icons.account_balance_wallet, "Add Wallet", _showAddWalletDialog),
+              _buildActionButton(Icons.add_card, "Top Up Wallet", _showTopUpDialog),
+              _buildActionButton(Icons.swap_horiz, "Transfer Money", _showTransferDialog),
             ],
           ),
-        ],
-      ),
-    );
-  }
 
-  // Building Right Recent Log System Sidebar Component Frame
-  Widget _buildSidebar() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader("Recent Activity Logs"),
-          const SizedBox(height: 16),
-          const Expanded(
-            child: Center(
-              child: Text(
-                'No recent wallet operations logged today.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: AppColors.secondaryText),
-              ),
+          if (_controller.errorMessage != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              _controller.errorMessage!,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w500),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  // Individual Asset Display Grid Unit Layout Block
-  Widget _buildWalletCard(UserWallets wallet) {
+  Widget _buildWalletCard(Map<String, dynamic> wallet) {
     return Container(
       width: 180,
       padding: const EdgeInsets.all(16),
@@ -199,53 +217,275 @@ class _WalletsPageState extends State<WalletsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            wallet.name,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primaryText,
-            ),
-          ),
+          Text(wallet['wallet_name'] ?? 'Wallet',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
           const SizedBox(height: 4),
-          Text(
-            wallet.type,
-            style: const TextStyle(fontSize: 11, color: AppColors.secondaryText),
-          ),
+          Text(wallet['wallet_type'] ?? 'Cash',
+            style: const TextStyle(fontSize: 11, color: AppColors.secondaryText)),
           const SizedBox(height: 16),
-          Text(
-            "₱${wallet.balance.toStringAsFixed(2)}",
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.primaryText,
-            ),
-          ),
+          Text("₱${_controller.formatCurrency((wallet['wallet_balance'] ?? 0.0) as double)}",
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.primaryText)),
         ],
       ),
     );
   }
 
-  // Reusable Shared Structural Helper Functions
-  Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.bold,
-        color: AppColors.primaryText,
+  Widget _buildSidebar() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min, // Fix: Keeps column compact
+        children: [
+          _buildSectionHeader("Recent Activity Logs"),
+          const SizedBox(height: 16),
+          if (_controller.logs.isEmpty)
+            const Text(
+              'No activity logs found.', 
+              style: TextStyle(fontSize: 13, color: AppColors.secondaryText)
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true, // Fix: Lets ListView have a specific height
+              physics: const NeverScrollableScrollPhysics(), // Fix: Prevents scroll fighting
+              itemCount: _controller.logs.length,
+              separatorBuilder: (_, __) => const Divider(color: AppColors.borderColor),
+              itemBuilder: (ctx, i) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: Text(
+                  _controller.logs[i],
+                  style: const TextStyle(fontSize: 13, color: AppColors.primaryText),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
+
+  // --- Logic-Triggered Dialogs ---
+
+  void _dialogShell({
+    required String title,
+    required String action,
+    required List<Widget> Function(StateSetter ss) fields,
+    required Future<void> Function() onSave,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, ss) => AlertDialog(
+          backgroundColor: AppColors.cardBg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(title, style: const TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Form(
+              key: _formKey,
+              child: Column(mainAxisSize: MainAxisSize.min, children: fields(ss)),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text("Cancel", style: TextStyle(color: AppColors.secondaryText)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryText, 
+                foregroundColor: AppColors.cardBg,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                if (!_formKey.currentState!.validate()) return;
+                try {
+                  await onSave();
+                  if (ctx.mounted) Navigator.pop(ctx);
+                } catch (e) {
+                  if (ctx.mounted) {
+                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+                  }
+                }
+              },
+              child: Text(action),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddWalletDialog() {
+    final name = TextEditingController(), bal = TextEditingController();
+    var type = 'Cash';
+    _controller.clearError();
+    
+    _dialogShell(
+      title: 'Add New Wallet',
+      action: 'Save Wallet',
+      onSave: () => _controller.addWallet(
+        name: name.text.trim(),
+        type: type,
+        balance: double.tryParse(bal.text) ?? 0.0,
+      ),
+      fields: (ss) => [
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: name,
+          style: const TextStyle(color: AppColors.primaryText),
+          decoration: _inputField('Wallet Name'),
+          autofillHints: const[],
+          validator: (v) => (v == null || v.isEmpty) ? "Name is required" : null,
+        ),
+        const SizedBox(height: 14),
+        DropdownButtonFormField<String>(
+          initialValue: type,
+          decoration: _inputField('Account Type'),
+          style: const TextStyle(color: AppColors.primaryText, fontSize: 16),
+          icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.primaryText),
+          dropdownColor: AppColors.cardBg,
+          items: ['Cash', 'Bank Account', 'E-Wallet']
+              .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+              .toList(),
+          onChanged: (v) => ss(() => type = v!),
+        ),
+        const SizedBox(height: 14),
+        TextFormField(
+          controller: bal,
+          keyboardType: TextInputType.number,
+          style: const TextStyle(color: AppColors.primaryText),
+          decoration: _inputField('Initial Balance', currency: true),
+          autofillHints: const[],
+          validator: (v) => double.tryParse(v ?? '') == null ? "Enter a valid number" : null,
+        ),
+      ],
+    );
+  }
+
+  void _showTopUpDialog() {
+    final wallets = context.read<WalletProvider>().wallets;
+    if (wallets.isEmpty) {
+      _controller.setError("No wallets available. Add one first.");
+      return;
+    }
+    _controller.clearError();
+    final amt = TextEditingController();
+    var selected = wallets.first;
+
+    _dialogShell(
+      title: 'Top Up Wallet',
+      action: 'Top Up',
+      onSave: () => _controller.topUp(wallet: selected, amount: double.parse(amt.text)),
+      fields: (ss) => [
+        const SizedBox(height: 10),
+        DropdownButtonFormField<Map<String, dynamic>>(
+          initialValue: selected,
+          decoration: _inputField('Select Wallet'),
+          style: const TextStyle(color: AppColors.primaryText, fontSize: 16),
+          icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.primaryText),
+          dropdownColor: AppColors.cardBg,
+          items: wallets
+              .map((w) => DropdownMenuItem(
+                    value: w,
+                    child: Text(w['wallet_name'] ?? 'Wallet'),
+                  ))
+              .toList(),
+          onChanged: (v) => ss(() => selected = v!),
+          validator: (v) => v == null ? "Select a wallet" : null,
+        ),
+        const SizedBox(height: 14),
+        TextFormField(
+          controller: amt,
+          keyboardType: TextInputType.number,
+          style: const TextStyle(color: AppColors.primaryText),
+          decoration: _inputField('Amount to Add', currency: true),
+          autofillHints: const[],
+          validator: (v) {
+            final p = double.tryParse(v ?? '');
+            return (p == null || p <= 0) ? "Enter a valid amount" : null;
+          },
+        ),
+      ],
+    );
+  }
+
+  void _showTransferDialog() {
+    final wallets = context.read<WalletProvider>().wallets;
+    if (wallets.length < 2) {
+      _controller.setError("Need at least 2 wallets to transfer.");
+      return;
+    }
+
+    _controller.clearError();
+    final amt = TextEditingController();
+    var from = wallets[0], to = wallets[1];
+
+    _dialogShell(
+      title: 'Quick Transfer',
+      action: 'Transfer',
+      onSave: () => _controller.transfer(from: from, to: to, amount: double.parse(amt.text)),
+      fields: (ss) => [
+        const SizedBox(height: 10),
+        DropdownButtonFormField<Map<String, dynamic>>(
+          initialValue: from,
+          decoration: _inputField('From Wallet'),
+          style: const TextStyle(color: AppColors.primaryText, fontSize: 16),
+          icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.primaryText),
+          dropdownColor: AppColors.cardBg,
+          items: wallets
+              .map((w) => DropdownMenuItem(value: w, child: Text(w['wallet_name'] ?? 'Wallet')))
+              .toList(),
+          onChanged: (v) => ss(() {
+            from = v!;
+            if (to['wallet_id'] == from['wallet_id']) {
+              to = wallets.firstWhere(
+                (w) => w['wallet_id'] != from['wallet_id'],
+                orElse: () => wallets[0],
+              );
+            }
+          }),
+          validator: (v) => v == null ? "Select source wallet" : null,
+        ),
+        const SizedBox(height: 14),
+        DropdownButtonFormField<Map<String, dynamic>>(
+          initialValue: to,
+          decoration: _inputField('To Wallet'),
+          style: const TextStyle(color: AppColors.primaryText, fontSize: 16),
+          icon: const Icon(Icons.keyboard_arrow_down, color: AppColors.primaryText),
+          dropdownColor: AppColors.cardBg,
+          items: wallets
+              .where((w) => w['wallet_id'] != from['wallet_id'])
+              .map((w) => DropdownMenuItem(value: w, child: Text(w['wallet_name'] ?? 'Wallet')))
+              .toList(),
+          onChanged: (v) => ss(() => to = v!),
+          validator: (v) => v == null ? "Select destination wallet" : null,
+        ),
+        const SizedBox(height: 14),
+        TextFormField(
+          controller: amt,
+          keyboardType: TextInputType.number,
+          style: const TextStyle(color: AppColors.primaryText),
+          decoration: _inputField('Amount', currency: true),
+          autofillHints: const[],
+          validator: (v) {
+            final p = double.tryParse(v ?? '');
+            return (p == null || p <= 0) ? "Enter a valid amount" : null;
+          },
+        ),
+      ],
+    );
+  }
+
+  // --- UI Style Helpers ---
+  
+  Widget _buildSectionHeader(String title) => Text(title, 
+    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryText));
 
   Widget _buildActionButton(IconData icon, String label, VoidCallback onPressed) {
     return OutlinedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 16, color: AppColors.primaryText),
-      label: Text(
-        label,
-        style: const TextStyle(fontSize: 13, color: AppColors.primaryText),
-      ),
+      label: Text(label, style: const TextStyle(fontSize: 13, color: AppColors.primaryText)),
       style: OutlinedButton.styleFrom(
         side: const BorderSide(color: AppColors.borderColor),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -254,206 +494,23 @@ class _WalletsPageState extends State<WalletsPage> {
     );
   }
 
-  BoxDecoration _cardDecoration() {
-    return BoxDecoration(
-      color: AppColors.cardBg,
-      borderRadius: BorderRadius.circular(15),
-      border: Border.all(color: AppColors.borderColor),
-    );
-  }
+  BoxDecoration _cardDecoration() => BoxDecoration(
+    color: AppColors.cardBg, 
+    borderRadius: BorderRadius.circular(15), 
+    border: Border.all(color: AppColors.borderColor)
+  );
+
+  InputDecoration _inputField(String label, {bool currency = false}) => InputDecoration(
+    filled: true,
+    fillColor: AppColors.background,
+    labelText: label,
+    labelStyle: const TextStyle(color: AppColors.secondaryText, fontWeight: FontWeight.w500),
+    errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 12),
+    prefixText: currency ? '₱ ' : null,
+    prefixStyle: const TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.w500),
+    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.borderColor, width: 1.5)),
+    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primaryText, width: 1.5)),
+    errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.redAccent, width: 1.5)),
+    focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Colors.redAccent, width: 1.5)),
+  );
 }
-  
-  /*import 'package:flutter/material.dart';
-  //import 'package:flutter/gestures.dart';
-  import 'package:upesov/theme/upesov_theme.dart';
-  import 'package:upesov/features/widgets/navbar.dart';
-  import 'package:upesov/features/model/user_wallets.dart';
-  import 'package:flutter/widget_previews.dart';
-
-//preview of wallets page layout
-  @Preview(name: 'Wallets Layout Preview')
-  Widget previewWallets() {
-    return WalletsPage();
-  }
-
-  class WalletsPage extends StatefulWidget{
-    const WalletsPage({super.key});
-
-    @override
-    State<WalletsPage> createState() => _WalletsPageState();
-  }
-
-class _WalletsPageState extends State<WalletsPage> {
-  // 2. Initial state configuration holding current data entries
-  final List<UserWallets> _myWallets = [
-    UserWallets(name: "GCash", balance: 1500.0, type: "Cash"),
-    UserWallets(name: "BPI", balance: 25000.0, type: "Bank Account"),
-  ];
-
-  double get _totalBalance {
-    return _myWallets.fold(0.0, (sum, wallet) => sum + wallet.balance);
-  }
-
-  // 3. Trigger tracking logic to append objects on command
-  void _addNewWallet() {
-    setState(() {
-      _myWallets.add(
-        UserWallets(
-          name: "Wallet #${_myWallets.length + 1}",
-          balance: 0.0,
-          type: "Cash",
-        ),
-      );
-    });
-  }
-
-//===== FRONTEND =====
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: const CustomNavBar(currentPage: 'WALLETS'),
-      body: Row(
-        children: [
-
-          // ===== LEFT AREA: MAIN CONTENT (75% width via flex: 3) =====
-          Expanded(
-            flex: 3,
-            child: SingleChildScrollView( // Prevents UI vertical clipping
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-
-                  // Total balance container
-                  Container(
-                    width: 250,
-                    height: 100,
-                    margin: const EdgeInsets.only(top: 15.0, bottom: 15.0), // Creates space from the Navbar
-                    decoration: BoxDecoration(
-                      color: AppColors.infoContainer1,
-                      borderRadius: BorderRadius.circular(20.0), // Rounded corners (20px)
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15), // Soft subtle shadow
-                          blurRadius: 8.0,
-                          offset: const Offset(0, 4), // Shifted shadow downwards
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: Text(
-                        'Total Balance: ₱${_totalBalance.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Color.fromARGB(255, 0, 0, 0),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  // Dynamic Wallets Area populated directly from your list loop
-                  const Text(
-                    "My Wallets",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color.fromARGB(255, 10, 7, 7)),
-                  ),
-                  
-                  const SizedBox(height: 15),
-
-                  Wrap(
-                    spacing: 15,    // Horizontal gaps between items
-                    runSpacing: 15, // Vertical gaps between implicitly wrapped rows
-                    alignment: WrapAlignment.start,
-                    children: _myWallets.map((wallet) {
-                      return Card(
-                        color: Colors.white,
-                        elevation: 3,
-                        child: Container(
-                          width: 160, // Grid item sizing boundary
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                wallet.name, 
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              ),
-                              Text(
-                                wallet.type, 
-                                style: const TextStyle(color: Colors.grey, fontSize: 12),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                "₱${wallet.balance.toStringAsFixed(2)}",
-                                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.green),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  // ===== ACTION BUTTONS =====
-                  ElevatedButton.icon(
-                    onPressed: _addNewWallet,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    ),
-                    icon: const Icon(Icons.add),
-                    label: const Text("Add Wallet"),
-                  ),
-
-                  /*
-                  ElevatedButton.icon(
-                    onPressed: _addMoney,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    ),
-                    icon: const Icon(Icons.add),
-                    label: const Text("Add Money"),
-                  ),
-
-                  ElevatedButton.icon(
-                    onPressed: _transferMoney,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    ),
-                    icon: const Icon(Icons.add),
-                    label: const Text("Transfer Money"),
-                  ),
-                  */
-
-
-                ],
-              ),
-            ),
-          ),
-
-          // ===== RIGHT AREA: RECENT LOGS CONTAINER (25% width) =====
-          Container(
-            width: MediaQuery.of(context).size.width * 0.25,
-            height: double.infinity,
-            color: AppColors.infoContainer1,
-            child: const Center(
-              child: Text(
-                'Recent Logs:',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-*/

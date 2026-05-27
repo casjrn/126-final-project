@@ -31,12 +31,17 @@ dependencies:
   flutter:
     sdk: flutter
 
+  #for mapping/managing wallets and goals
+  provider: ^6.1.1
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
   # Charts dependencies for summaries (pie charts)
   fl_chart: ^1.2.0
+  supabase_flutter: ^2.12.4
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
