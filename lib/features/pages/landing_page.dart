@@ -51,7 +51,7 @@ class LandingPage extends StatelessWidget {
                         ),
                       ),
                       const Text(
-                        'Smart spending for the modern Iskx',
+                        'Smart spending for the modern Iskx.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 18,

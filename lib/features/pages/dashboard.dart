@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:upesov/theme/upesov_theme.dart';
 import 'package:upesov/features/widgets/navbar.dart';
 import 'package:flutter/widget_previews.dart';
@@ -27,23 +28,44 @@ class DashboardPage extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+
                   // ===== LEFT AREA: DASHBOARD TRACKING CONTENT (75% Width) =====
                   Expanded(
                     flex: 3,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Container(padding: EdgeInsets.all(16.0),
+                        child: const Text(
+                          'Hello, User!',
+                          style: TextStyle(
+                          fontSize: 40,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryText,  
+                            ),
+                          ),
+                        ),
+
                         _buildTotalSummaryCard(),
                         const SizedBox(height: 24),
                         _buildAnalyticsSection(),
                       ],
+
                     ),
                   ),
                   const SizedBox(width: 24),
                   // ===== RIGHT AREA: QUICK SELECT SIDEBAR (25% Width) =====
                   Expanded(
                     flex: 1,
-                    child: _buildQuickSelectSidebar(),
+                    child: Column(
+                    children:[ 
+                      const SizedBox(width: 12),
+                      _buildActionButton(Icons.add_card, "Add Money", () {}),
+                      const SizedBox(height: 35),
+                      _buildQuickSelectSidebar(), 
+                      ],
+                    )
+
                   ),
                 ],
               ),
@@ -55,7 +77,6 @@ class DashboardPage extends StatelessWidget {
   }
 
   // ===== LEFT SIDE BUILDERS =====
-
   Widget _buildTotalSummaryCard() {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -64,12 +85,202 @@ class DashboardPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.borderColor),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Wrap(
+        spacing: 24,
+        runSpacing: 24,
         children: [
-          Expanded(child: _buildSummaryItem('Total Balance', '₱0.00', AppColors.primaryText)),
-          _buildVerticalDivider(),
-          Expanded(child: _buildSummaryItem('Expenses', '₱0.00', AppColors.primaryText)),
+
+          // ===== SPENDING SUMMARY =====
+          SizedBox(
+            width: 500,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.infoContainer1,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Spending Summary',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryText,
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  Wrap(
+                    spacing: 24,
+                    runSpacing: 24,
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+
+                      // PIE CHART
+                      SizedBox(
+                        width: 180,
+                        height: 180,
+                        child: PieChart(
+                          PieChartData(
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 0,
+                            sections: [
+                              PieChartSectionData(
+                                value: 55,
+                                color: Colors.deepPurple,
+                                radius: 60,
+                                showTitle: false,
+                              ),
+                              PieChartSectionData(
+                                value: 25,
+                                color: Colors.lightGreenAccent,
+                                radius: 60,
+                                showTitle: false,
+                              ),
+                              PieChartSectionData(
+                                value: 15,
+                                color: Colors.pinkAccent,
+                                radius: 60,
+                                showTitle: false,
+                              ),
+                              PieChartSectionData(
+                                value: 5,
+                                color: Colors.white,
+                                radius: 60,
+                                showTitle: false,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // LEGEND
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Food: ₱500', style: TextStyle(color: AppColors.primaryText),),
+                          SizedBox(height: 10),
+                          Text('Transport: ₱250', style: TextStyle(color: AppColors.primaryText),),
+                          SizedBox(height: 10),
+                          Text('School: ₱150', style: TextStyle(color: AppColors.primaryText),),
+                          SizedBox(height: 10),
+                          Text('Others: ₱50', style: TextStyle(color: AppColors.primaryText),),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ===== SAVINGS SUMMARY =====
+          SizedBox(
+            width: 500,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.infoContainer1,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Savings Summary',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryText,
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  Wrap(
+                    spacing: 24,
+                    runSpacing: 24,
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+
+                      // DONUT CHART
+                      SizedBox(
+                        width: 180,
+                        height: 180,
+                        child: PieChart(
+                          PieChartData(
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 20,
+                            sections: [
+                              PieChartSectionData(
+                                value: 55,
+                                color: Colors.deepPurple,
+                                radius: 55,
+                                showTitle: false,
+                              ),
+                              PieChartSectionData(
+                                value: 25,
+                                color: Colors.lightGreenAccent,
+                                radius: 55,
+                                showTitle: false,
+                              ),
+                              PieChartSectionData(
+                                value: 15,
+                                color: Colors.pinkAccent,
+                                radius: 55,
+                                showTitle: false,
+                              ),
+                              PieChartSectionData(
+                                value: 5,
+                                color: Colors.white,
+                                radius: 55,
+                                showTitle: false,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // SAVINGS DETAILS
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Amount Saved:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryText,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text('₱5,000', style: TextStyle(color: AppColors.primaryText),),
+
+                          SizedBox(height: 20),
+
+                          Text(
+                            'Target Amount:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryText,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text('₱10,000', style: TextStyle(color: AppColors.primaryText),),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -203,6 +414,21 @@ class DashboardPage extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  
+  Widget _buildActionButton(IconData icon, String label, VoidCallback onPressed) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 20, color: const Color.fromARGB(255, 255, 255, 255)),
+      label: Text(label, style: const TextStyle(fontSize: 25, color: Color.fromARGB(255, 255, 255, 255))),
+      style: OutlinedButton.styleFrom(
+        backgroundColor: AppColors.navGreen,
+        side: const BorderSide(color: AppColors.borderColor),
+        padding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
