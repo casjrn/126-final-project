@@ -35,6 +35,7 @@ class ExpenseProvider extends ChangeNotifier {
     _walletOptions = (results[2] as List).map((e) => {
       'id': e['wallet_id'].toString(),
       'name': e['wallet_name'].toString(),
+      'balance': e['wallet_balance'].toString(),
     }).toList();
 
     _isLoading = false;

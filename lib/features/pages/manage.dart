@@ -68,6 +68,8 @@ class _ManagePageState extends State<ManagePage> {
     final expenses = provider.expenses;
     if (expenses.isEmpty) return [];
 
+    DateTime now = DateTime.now();
+
     List<Map<String, dynamic>> list = List.from(expenses);
 
     if (_searchController.text.isNotEmpty) {
@@ -99,6 +101,35 @@ class _ManagePageState extends State<ManagePage> {
         return amt <= appliedMax!;
       }).toList();
     }
+
+    list = list.where((tx) {
+      final txDateString = tx['expense_date'] as String?;
+      if (txDateString == null) return false;
+      final txDate = DateTime.parse(txDateString);
+
+      bool matchesTime = true;
+      if (selectedTimeFilter == 'Today') {
+        matchesTime = _isSameDay(txDate, now);
+      } else if (selectedTimeFilter == 'This Week') {
+        DateTime startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+        matchesTime = txDate.isAfter(DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day).subtract(const Duration(seconds: 1)));
+      } else if (selectedTimeFilter == 'This Month') {
+        matchesTime = txDate.month == now.month && txDate.year == now.year;
+      } else if (selectedTimeFilter == 'Custom') {
+        if (filterYear != null) matchesTime &= (txDate.year == filterYear);
+        if (filterMonth != null) matchesTime &= (txDate.month == filterMonth);
+        if (filterDay != null) matchesTime &= (txDate.day == filterDay);
+      }
+
+      bool matchesWeek = true;
+      if (appliedWeekOfMonth != 'All Weeks') {
+
+        int weekNum = int.parse(appliedWeekOfMonth.split(' ')[1]);
+        matchesWeek = _getWeekOfMonth(txDate) == weekNum;
+      }
+
+      return matchesTime && matchesWeek;
+    }).toList();
 
     if (appliedSort == 'Amount (Highest - Lowest)') {
       list.sort((a, b) => double.parse((b['expense_amount'] ?? '0').toString())
@@ -275,7 +306,11 @@ class _ManagePageState extends State<ManagePage> {
     return list;
   }
 
-  bool _isSameDay(DateTime d1, DateTime d2) => d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
+  bool _isSameDay(DateTime d1, DateTime d2) {
+  final a = d1.toLocal();
+  final b = d2.toLocal();
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
 
   int _getWeekOfMonth(DateTime date) {
     int day = date.day;
@@ -283,6 +318,7 @@ class _ManagePageState extends State<ManagePage> {
     if (day <= 14) return 2;
     if (day <= 21) return 3;
     if (day <= 28) return 4;
+    if (day > 28) return 5;
     return 5;
   }
 
@@ -473,20 +509,46 @@ class _ManagePageState extends State<ManagePage> {
 
   Widget _buildExpensesTable() {
     final displayList = filteredExpenses;
-    return Table(
-      columnWidths: const { 0: FlexColumnWidth(1), 1: FlexColumnWidth(2), 2: FlexColumnWidth(1), 3: FlexColumnWidth(1), 4: FlexColumnWidth(1), 5: FixedColumnWidth(100) },
-      defaultVerticalAlignment: TableCellVerticalAlignment.middle, 
+
+    const tableLayout = {
+      0: FlexColumnWidth(1.0), 
+      1: FlexColumnWidth(1.5), 
+      2: FlexColumnWidth(1.2), 
+      3: FlexColumnWidth(1.2), 
+      4: FlexColumnWidth(1.0), 
+      5: FixedColumnWidth(100), 
+    };
+
+    return Column(
       children: [
-        _buildTableHeader(),
-        for (int i = 0; i < displayList.length; i++) 
-          _buildDataRow(
-            i, 
-            DateFormat('MM/dd/yy').format(DateTime.parse(displayList[i]['expense_date'])),
-            (displayList[i]['expense_description'] ?? '').toString(),
-            (displayList[i]['categories']?['category_name'] ?? '').toString(),
-            (displayList[i]['wallets']?['wallet_name'] ?? '').toString(),
-            '₱${displayList[i]['expense_amount'] ?? '0'}',
+        Table(
+          columnWidths: tableLayout,
+          children: [_buildTableHeader()],
+        ),
+
+        Expanded(
+          child: Scrollbar( 
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Table(
+                columnWidths: tableLayout,
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                children: [
+                  for (int i = 0; i < displayList.length; i++)
+                    _buildDataRow(
+                      i,
+                      DateFormat('MM/dd/yy').format(DateTime.parse(displayList[i]['expense_date'])),
+                      (displayList[i]['expense_description'] ?? '').toString(),
+                      (displayList[i]['categories']?['category_name'] ?? '').toString(),
+                      (displayList[i]['wallets']?['wallet_name'] ?? '').toString(),
+                      '₱${displayList[i]['expense_amount'] ?? '0'}',
+                    ),
+                ],
+              ),
+            ),
           ),
+        ),
       ],
     );
   }

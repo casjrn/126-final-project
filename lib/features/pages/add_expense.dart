@@ -41,6 +41,10 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
     
     _amountController = TextEditingController(text: widget.initialData?['expense_amount']?.toString() ?? '');
     _itemController = TextEditingController(text: widget.initialData?['expense_description'] ?? '');
+
+    _amountController.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
@@ -63,17 +67,32 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
   }
   
   void _handleSave() {
-  setState(() => _showErrors = true);
-    final String amount = _amountController.text.trim();
-    if (amount.isEmpty || selectedCategoryId == null || selectedWalletId == null)  return;
+    setState(() => _showErrors = true);
+    
+    final String amountStr = _amountController.text.trim();
+    final double expenseAmount = double.tryParse(amountStr) ?? 0.0;
+
+    if (amountStr.isEmpty || selectedCategoryId == null || selectedWalletId == null) return;
+
+    final selectedWallet = widget.walletOptions.firstWhere(
+      (e) => e['id'] == selectedWalletId, 
+      orElse: () => {},
+    );
+
+    if (selectedWallet.isNotEmpty) {
+      final double currentBalance = double.tryParse(selectedWallet['balance'] ?? '0.0') ?? 0.0;
+
+      if (expenseAmount > currentBalance) return; 
+    }
+
     Navigator.pop(context, {
       'expense_date': selectedDate.toIso8601String(), 
       'expense_description': _itemController.text.isEmpty ? 'No item description' : _itemController.text,
       'category_id': selectedCategoryId, 
       'wallet_id': selectedWalletId,     
-      'expense_amount': double.tryParse(amount) ?? 0.0, 
+      'expense_amount': expenseAmount, 
     });
-}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -133,33 +152,61 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
   }
 
   Widget _buildSidebarSection() {
+    final double expenseAmount = double.tryParse(_amountController.text) ?? 0.0;
+    
+    Map<String, String>? selectedWallet;
+    double currentBalance = 0.0;
+
+    if (selectedWalletId != null) {
+      selectedWallet = widget.walletOptions.firstWhere((e) => e['id'] == selectedWalletId);
+      //final wallet = widget.walletOptions.firstWhere((e) => e['id'] == selectedWalletId);
+      currentBalance = double.tryParse(selectedWallet['balance'] ?? '0.0') ?? 0.0;
+    }
+
     bool isMissingFields = _showErrors && (_amountController.text.isEmpty || selectedCategoryId == null || selectedWalletId == null);
+    bool isOverBudget = selectedWalletId != null && expenseAmount > currentBalance;
+
     return Column(
       children: [
-        if (isMissingFields) ...[
-          const SizedBox(height: 16),
+        if (isMissingFields) _errorTile('Please fill in all required (*) fields.'),
+        
+        if (isOverBudget) 
+          _errorTile('Insufficient funds in ${selectedWallet?['name']} (Balance: ₱${currentBalance.toStringAsFixed(2)})'),
+        
+        if (selectedWalletId != null && !isOverBudget && !isMissingFields)
           Container(
+            margin: const EdgeInsets.only(top: 12),
             padding: const EdgeInsets.all(12),
+            width: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.redAccent.withValues(alpha: 0.1), 
-              borderRadius: BorderRadius.circular(12), 
-              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3))
+              color: const Color(0xFFE8F5E9), 
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Row(
-              children: [
-                Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Please fill in all required (*) fields to save.', 
-                    style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600)
-                  )
-                ),
-              ],
+            child: Text(
+              '${selectedWallet?['name']} balance after this expense: ₱${(currentBalance - expenseAmount).toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF2E7D32), fontWeight: FontWeight.bold),
             ),
           ),
-        ]
       ],
+    );
+  }
+
+  Widget _errorTile(String message) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3))
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+          const SizedBox(width: 10),
+          Expanded(child: Text(message, style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600))),
+        ],
+      ),
     );
   }
 
