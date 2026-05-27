@@ -554,7 +554,7 @@ class _DashboardPageState extends State<DashboardPage> {
           'Hello, User!',
           style: TextStyle(
             fontSize: 40,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.bold, 
             color: AppColors.primaryText,  
           ),
         ),  
