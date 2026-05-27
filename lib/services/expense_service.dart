@@ -26,7 +26,7 @@ class ExpenseService {
   }
 
   Future<List<Map<String, dynamic>>> fetchWallets() async {
-    final response = await _supabase.from('wallets').select('wallet_id, wallet_name');
+    final response = await _supabase.from('wallets').select('wallet_id, wallet_name, wallet_balance');
     return List<Map<String, dynamic>>.from(response);
   }
 

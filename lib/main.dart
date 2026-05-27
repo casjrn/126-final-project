@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart'; // 1. Import Provider
+import 'package:upesov/providers/expense_provider.dart';
 import 'package:upesov/theme/upesov_theme.dart';
 import 'package:upesov/features/pages/landing_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -8,6 +9,9 @@ import 'package:upesov/providers/wallet_provider.dart'; // 2. Import your Wallet
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  // const String supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  
   // Initialize Supabase
   await Supabase.initialize(
     url: 'https://zcmbtclypnsbsxfpfgmk.supabase.co',
@@ -19,6 +23,7 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => WalletProvider()),
+        ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         // GoalProvider
       ],
       child: const MyApp(),
