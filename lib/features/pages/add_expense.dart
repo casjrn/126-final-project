@@ -112,14 +112,11 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
             const SizedBox(height: 12),
             const Text('MAIN ENTRY FORM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.secondaryText)),
             const SizedBox(height: 24),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 3, child: _buildEntryForm()),
-                const SizedBox(width: 40),
-                Expanded(flex: 2, child: _buildSidebarSection()),
-              ],
-            ),
+
+            _buildEntryForm(),
+            const SizedBox(width: 40),
+            _buildSidebarSection(),
+
             const SizedBox(height: 32),
             _buildActionButtons(context),
           ],

@@ -19,14 +19,16 @@ class WalletService {
   }
 
   // Fetch all wallets for a specific user
-  Future<List<Map<String, dynamic>>> fetchWallets() async {
-    final user = _client.auth.currentUser;
-    if (user == null) return [];
+// Inside goal_service.dart or wallet_service.dart
+Future<List<Map<String, dynamic>>> fetchWallets() async {
+  final user = Supabase.instance.client.auth.currentUser;
+  if (user == null) return [];
 
-    return await _client
-        .from('wallets')
-        .select()
-        .eq('user_id', user.id)
-        .order('wallet_created_at');
-  }
+  final data = await Supabase.instance.client
+      .from('wallets')
+      .select()
+      .eq('user_id', user.id);
+
+  return List<Map<String, dynamic>>.from(data);
+}
 }
