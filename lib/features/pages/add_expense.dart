@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart'; 
 import 'package:upesov/theme/upesov_theme.dart';
 
@@ -131,7 +130,7 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
     bool isMissingFields = _showErrors && (_amountController.text.isEmpty || selectedCategory == null || selectedWallet == null);
     return Column(
       children: [
-        _buildBudgetFeedback(),
+        //_buildBudgetFeedback(),
         if (isMissingFields) ...[
           const SizedBox(height: 16),
           Container(
@@ -303,7 +302,7 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
     );
   }
 
-  Widget _buildBudgetFeedback() {
+  /*Widget _buildBudgetFeedback() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.5), border: Border.all(color: AppColors.borderColor), borderRadius: BorderRadius.circular(15)),
@@ -339,7 +338,7 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
         ],
       ),
     );
-  }
+  }*/
 
   Widget _buildActionButtons(BuildContext context) {
     return Row(

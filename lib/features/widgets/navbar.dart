@@ -5,7 +5,6 @@ import 'package:upesov/features/pages/dashboard.dart';
 import 'package:upesov/features/pages/wallets.dart';
 import 'package:upesov/features/pages/budget.dart';
 import 'package:upesov/features/pages/manage.dart';
-// Line removed from here!
 
 class CustomNavBar extends StatelessWidget implements PreferredSizeWidget {
   final String currentPage;
@@ -24,7 +23,7 @@ class CustomNavBar extends StatelessWidget implements PreferredSizeWidget {
         children: [
 
           //==== LOGO & TITLE ====
-          Image.asset('lib/assets/logo_glow.png', width: 45),
+          Image.asset('lib/assets/logo_glow.png', width: 70),
           const SizedBox(width: 15),
           Container(height: 40, width: 1, color: Colors.white24),
           const SizedBox(width: 20),
@@ -36,10 +35,19 @@ class CustomNavBar extends StatelessWidget implements PreferredSizeWidget {
           const SizedBox(width: 40),
 
           //==== NAV LINKS ====
-          _navLink(context, "DASHBOARD", DashboardPage()),
-          _navLink(context, "WALLETS", WalletsPage()),
-          _navLink(context, "MANAGE", ManagePage()),
-          _navLink(context, "BUDGET", BudgetPage()),
+          Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _navLink(context, "DASHBOARD", DashboardPage()),
+                      _navLink(context, "WALLETS", WalletsPage()),
+                      _navLink(context, "MANAGE", ManagePage()),
+                      _navLink(context, "BUDGET", BudgetPage()),
+                    ],
+                  ),
+                ),
+              ),
 
           const Spacer(),
           //==== PROFILE & LOG OUT ====
