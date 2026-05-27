@@ -11,6 +11,7 @@ class WalletProvider extends ChangeNotifier {
   List<Map<String, dynamic>> get wallets => _wallets;
   bool get isLoading => _isLoading;
 
+
   double get totalBalance => _wallets.fold(0.0, (sum, w) {
     final val = w['wallet_balance'] ?? 0;
     return sum + val.toDouble();
@@ -94,4 +95,48 @@ class WalletProvider extends ChangeNotifier {
       _setLoading(false);
     }
   }
+
+  //fetch wallets
+    Future<void> fetchWallets() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _wallets = await _service.fetchWallets();
+    } catch (e) {
+      debugPrint("Provider Fetch Error: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // DEDUCT MONEY
+  Future<void> deductMoney(String walletId, double currentBalance, double amountToSubtract) async {
+    _setLoading(true);
+    try {
+      final newBalance = currentBalance - amountToSubtract;
+      await Supabase.instance.client
+          .from('wallets')
+          .update({'wallet_balance': newBalance})
+          .eq('wallet_id', walletId);
+      
+      await refresh(); // Refresh UI with new balance
+    } catch (e) {
+      debugPrint("Error deducting money: $e");
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  //gets cash wallets
+  double get cashBalance {
+    return _wallets
+      .where((w) => w['wallet_type']?.toString().toLowerCase() == 'cash')
+      .fold(0.0, (sum, w) {
+      return sum + (double.tryParse(w['wallet_balance'].toString()) ?? 0.0);
+      });
+  }
+
 }
+

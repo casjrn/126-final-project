@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:upesov/theme/upesov_theme.dart';
 import 'package:upesov/features/widgets/navbar.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
+import 'package:upesov/providers/goal_provider.dart';
+import 'package:upesov/providers/wallet_provider.dart';
 
 class BudgetPage extends StatefulWidget {
   const BudgetPage({super.key});
@@ -12,11 +15,14 @@ class BudgetPage extends StatefulWidget {
 
 class _BudgetPageState extends State<BudgetPage> {
  
-  double _allowance = 2500.00; //modify this
-  double _targetSavings = 0.0; 
-  double _amountSaved = 0.0;
-  double _totalCumulativeSaved = 0.0; 
-  bool _isBudgetSet = false; // if na-set up an budget then set to true
+  bool _isBudgetSet = false;
+
+  double get _currentPhysicalCash => context.watch<WalletProvider>().cashBalance;
+
+  double get _spendableAmount {
+    final target = context.watch<GoalProvider>().targetAmount;
+    return _currentPhysicalCash - target;
+  }
 
   final List<Map<String, dynamic>> _categories = [
     {'name': 'Food & Dining', 'pct': 0.0, 'act': 0.0},
@@ -32,6 +38,11 @@ class _BudgetPageState extends State<BudgetPage> {
   @override
   void initState() {
     super.initState();
+    // Fetch data from DB on load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<GoalProvider>().fetchGoal();
+      context.read<WalletProvider>().fetchWallets();
+    });
     for (var cat in _categories) {
       _controllers[cat['name']] = TextEditingController(text: (cat['pct'] ?? 0.0).toString());
     }
@@ -45,8 +56,6 @@ class _BudgetPageState extends State<BudgetPage> {
     super.dispose();
   }
 
-  double get _spendableAmount => _allowance - _targetSavings;
-
   BoxDecoration _cardDecoration() => BoxDecoration(
         color: AppColors.cardBg,
         borderRadius: BorderRadius.circular(15),
@@ -54,7 +63,8 @@ class _BudgetPageState extends State<BudgetPage> {
       );
 
   void _showSetTargetSavingsDialog() {
-    TextEditingController targetController = TextEditingController(text: _targetSavings.toString());
+    final goalProv = context.read<GoalProvider>();
+    TextEditingController targetController = TextEditingController(text: goalProv.targetAmount.toString());
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -70,9 +80,10 @@ class _BudgetPageState extends State<BudgetPage> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.redAccent))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.navGreen),
-            onPressed: () {
-              setState(() => _targetSavings = double.tryParse(targetController.text) ?? 0.0);
-              Navigator.pop(context);
+            onPressed: () async {
+              double val = double.tryParse(targetController.text) ?? 0.0;
+              await context.read<GoalProvider>().setTarget(val);
+              if (context.mounted) Navigator.pop(context);
             },
             child: const Text("Save", style: TextStyle(color: Colors.white)),
           ),
@@ -82,9 +93,10 @@ class _BudgetPageState extends State<BudgetPage> {
   }
 
   void _showAddSavingsDialog() {
+    final walletProv = context.read<WalletProvider>(); // Get WalletProvider
+    final goalProv = context.read<GoalProvider>();     // Get GoalProvider
     TextEditingController amountController = TextEditingController();
-    String? selectedWallet;
-    final List<String> wallets = ['Cash', 'E-wallet', 'Bank'];
+    Map<String, dynamic>? selectedWallet;
 
     showDialog(
       context: context,
@@ -102,7 +114,7 @@ class _BudgetPageState extends State<BudgetPage> {
                 decoration: const InputDecoration(labelText: "Amount to Add", prefixText: "₱ "),
               ),
               const SizedBox(height: 20),
-              DropdownButtonFormField<String>(
+              DropdownButtonFormField<Map<String, dynamic>>(
                 dropdownColor: Colors.white,
                 style: const TextStyle(color: AppColors.primaryText),
                 decoration: const InputDecoration(
@@ -110,7 +122,7 @@ class _BudgetPageState extends State<BudgetPage> {
                   labelStyle: TextStyle(color: AppColors.secondaryText),
                 ),
                 initialValue: selectedWallet,
-                items: wallets.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
+                items: walletProv.wallets.map((w) => DropdownMenuItem<Map<String, dynamic>>(value: w, child: Text(w['wallet_name'] ?? 'Unnamed Wallet'))).toList(),
                 onChanged: (val) => setDialogState(() => selectedWallet = val),
               ),
             ],
@@ -119,14 +131,20 @@ class _BudgetPageState extends State<BudgetPage> {
             TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.redAccent))),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.navGreen),
-              onPressed: () {
-                if (amountController.text.isNotEmpty && selectedWallet != null) {
-                  double added = double.tryParse(amountController.text) ?? 0.0;
-                  setState(() {
-                    _amountSaved += added;
-                    _totalCumulativeSaved += added;
-                  });
-                  Navigator.pop(context);
+              onPressed: () async {
+                final amount = double.tryParse(amountController.text) ?? 0.0;
+
+                if (amount > 0 && selectedWallet != null) {
+                  // STEP 1: Update Savings Goal in DB
+                  await goalProv.addSavings(amount);
+
+                  // STEP 2: Deduct from selected Wallet in DB
+                  await walletProv.deductMoney(
+                    selectedWallet!['wallet_id'].toString(),
+                    (selectedWallet!['wallet_balance'] as num).toDouble(),
+                    amount,
+                  );  
+                  if (context.mounted) Navigator.pop(context);
                 }
               },
               child: const Text("Add", style: TextStyle(color: Colors.white)),
@@ -251,6 +269,7 @@ class _BudgetPageState extends State<BudgetPage> {
 
   @override
   Widget build(BuildContext context) {
+    final goalProv = context.watch<GoalProvider>();
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const CustomNavBar(currentPage: 'BUDGET'),
@@ -268,11 +287,11 @@ class _BudgetPageState extends State<BudgetPage> {
               flex: 3,
               child: Column(children: [
                 const SizedBox(height: 65), 
-                _buildSpendableAmountCard(), 
+                _buildSpendableAmountCard(goalProv.targetAmount), 
                 const SizedBox(height: 24),
-                _buildTotalSavedCard(),
+                _buildTotalSavedCard(goalProv.cumulativeAmount),
                 const SizedBox(height: 24), 
-                _buildSavingsGoalCard(), 
+                _buildSavingsGoalCard(goalProv.targetAmount, goalProv.currentAmount), 
                 const SizedBox(height: 24), 
                 _buildSavingsActions()
               ]),
@@ -283,13 +302,13 @@ class _BudgetPageState extends State<BudgetPage> {
     );
   }
 
-  Widget _buildTotalSavedCard() {
+  Widget _buildTotalSavedCard(double total) {
     return Container(
       width: double.infinity, padding: const EdgeInsets.all(20), decoration: _cardDecoration(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Total Amount Saved', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText, fontSize: 16)),
         const SizedBox(height: 12),
-        Text('₱${_totalCumulativeSaved.toStringAsFixed(2)}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.buttonBlue)),
+        Text('₱${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.buttonBlue)),
         const SizedBox(height: 4),
         const Text('Cumulative savings', style: TextStyle(fontSize: 11, color: AppColors.secondaryText)),
       ]),
@@ -366,33 +385,33 @@ class _BudgetPageState extends State<BudgetPage> {
     }).toList());
   }
 
-  Widget _buildSpendableAmountCard() {
+  Widget _buildSpendableAmountCard(double target) {
     return Container(
       width: double.infinity, padding: const EdgeInsets.all(20), decoration: _cardDecoration(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Weekly Budget', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText, fontSize: 16)),
         const SizedBox(height: 12),
-        Text('₱${_spendableAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.navGreen)),
+        Text('₱${_spendableAmount.toStringAsFixed(2)}', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: _spendableAmount < 0 ? Colors.redAccent : AppColors.navGreen)),
         const SizedBox(height: 4),
-        Text('Allowance (₱${_allowance.toStringAsFixed(2)}) - Savings (₱${_targetSavings.toStringAsFixed(2)})', style: const TextStyle(fontSize: 11, color: AppColors.secondaryText)),
-      ]),
+        Text('Cash (₱${_currentPhysicalCash.toStringAsFixed(2)}) - Savings Goal (₱${target.toStringAsFixed(2)})', 
+                style: const TextStyle(fontSize: 11, color: AppColors.secondaryText)),      ]),
     );
   }
 
-  Widget _buildSavingsGoalCard() {
+  Widget _buildSavingsGoalCard(double target, double current) {
     return Container(
       padding: const EdgeInsets.all(20), decoration: _cardDecoration(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Savings Goal', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText, fontSize: 20)),
+        const Text('Weekly Savings Goal', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText, fontSize: 20)),
         const SizedBox(height: 16),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          _savingsInfoColumn('Target:', '₱${_targetSavings.toStringAsFixed(2)}'),
-          _savingsInfoColumn('Amount Saved:', '₱${_amountSaved.toStringAsFixed(2)}', isRight: true),
+          _savingsInfoColumn('Target:', '₱${target.toStringAsFixed(2)}'),
+          _savingsInfoColumn('Amount Saved:', '₱${current.toStringAsFixed(2)}', isRight: true),
         ]),
         const SizedBox(height: 24),
-        LinearProgressIndicator(value: _targetSavings > 0 ? (_amountSaved / _targetSavings).clamp(0.0, 1.0) : 0.0, minHeight: 8, backgroundColor: AppColors.borderColor, color: AppColors.navGreen),
+        LinearProgressIndicator(value: target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0, minHeight: 8, backgroundColor: AppColors.borderColor, color: AppColors.navGreen),
         const SizedBox(height: 12),
-        Center(child: Text('${_targetSavings > 0 ? ((_amountSaved / _targetSavings) * 100).toInt() : 0}% reached', style: const TextStyle(fontSize: 11, color: AppColors.secondaryText))),
+        Center(child: Text('${target > 0 ? ((current / target) * 100).toInt() : 0}% reached', style: const TextStyle(fontSize: 11, color: AppColors.secondaryText))),
       ]),
     );
   }

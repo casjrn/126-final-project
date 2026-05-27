@@ -5,8 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:upesov/features/pages/login_page.dart';
 import 'package:upesov/features/pages/dashboard.dart';
 import 'package:upesov/theme/upesov_theme.dart';
-import 'package:upesov/services/goal_service.dart';
 import 'package:upesov/providers/wallet_provider.dart';
+import 'package:upesov/providers/goal_provider.dart';
 
 class SetUpPage extends StatefulWidget {
   const SetUpPage({super.key});
@@ -18,8 +18,6 @@ class SetUpPage extends StatefulWidget {
 class _SetUpPageState extends State<SetUpPage> {
   final _balanceController = TextEditingController();
   final _savingsController = TextEditingController();
-
-  final GoalService _goalService = GoalService();
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -48,20 +46,23 @@ class _SetUpPageState extends State<SetUpPage> {
       return;
     }
 
+    final walletProv = context.read<WalletProvider>();
+    final goalProv = context.read<GoalProvider>();
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      await context.read<WalletProvider>().addWallet(
+      await walletProv.addWallet(
         userId: user.id,
         name: 'Physical Wallet', 
         type: 'Cash',            
         balance: balance,
       );
 
-      await _goalService.createInitialGoal(userId: user.id, target: savings);
+      await goalProv.setTarget(savings);
 
       if (!mounted) return;
 
@@ -180,7 +181,7 @@ class _SetUpPageState extends State<SetUpPage> {
       );
     },
     style: TextButton.styleFrom(
-      foregroundColor: Colors.white.withOpacity(0.7),
+      foregroundColor: Colors.white.withValues(),
     ),
     child: const Text(
       "Skip for now",
