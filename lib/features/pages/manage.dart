@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; 
-import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:upesov/theme/upesov_theme.dart';
 import 'package:upesov/features/widgets/navbar.dart';
 import 'package:upesov/features/pages/add_expense.dart';
+import 'package:upesov/providers/expense_provider.dart';
+
 
 class ManagePage extends StatefulWidget {
   const ManagePage({super.key});
@@ -14,6 +17,8 @@ class ManagePage extends StatefulWidget {
 }
 
 class _ManagePageState extends State<ManagePage> {
+  ExpenseProvider get provider => Provider.of<ExpenseProvider>(context);
+
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _minAmountController = TextEditingController();
   final TextEditingController _maxAmountController = TextEditingController();
@@ -25,7 +30,7 @@ class _ManagePageState extends State<ManagePage> {
   String selectedCategory = 'All Categories';
   String selectedWallet = 'All Wallets';
   String selectedSort = 'All Expenses';
-  String selectedTimeFilter = 'All'; 
+  String selectedTimeFilter = 'All';
   String selectedWeekOfMonth = 'All Weeks';
 
   int? filterYear;
@@ -39,7 +44,13 @@ class _ManagePageState extends State<ManagePage> {
   double? appliedMin;
   double? appliedMax;
 
-  List<Map<String, dynamic>> expenses = [];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<ExpenseProvider>(context, listen: false).refresh();
+    });
+  }
 
   @override
   void dispose() {
@@ -52,51 +63,154 @@ class _ManagePageState extends State<ManagePage> {
     super.dispose();
   }
 
-  // expense summary chart implmentation that can be modified by the date filters
-  List<Map<String, dynamic>> get summaryFilteredExpenses {
+  List<Map<String, dynamic>> get filteredExpenses {
+    final provider = Provider.of<ExpenseProvider>(context, listen: false);
+    final expenses = provider.expenses;
     if (expenses.isEmpty) return [];
-    DateTime now = DateTime.now();
-    
-    return expenses.where((tx) {
-      final txDate = tx['date'] as DateTime?;
-      if (txDate == null) return false;
 
-      bool matchesTime = true; 
+    List<Map<String, dynamic>> list = List.from(expenses);
 
-      if (selectedTimeFilter == 'Today') {
-        matchesTime = _isSameDay(txDate, now);
-      } else if (selectedTimeFilter == 'This Week') {
-        DateTime startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-        matchesTime = txDate.isAfter(startOfWeek.subtract(const Duration(seconds: 1)));
-      } else if (selectedTimeFilter == 'This Month') {
-        matchesTime = txDate.month == now.month && txDate.year == now.year;
-      } else if (selectedTimeFilter == 'Custom') {
-        if (filterYear != null) matchesTime &= (txDate.year == filterYear);
-        if (filterMonth != null) matchesTime &= (txDate.month == filterMonth); 
-        if (filterDay != null) matchesTime &= (txDate.day == filterDay); 
-      }
+    if (_searchController.text.isNotEmpty) {
+      list = list.where((tx) =>
+          (tx['expense_description'] ?? '')
+              .toString()
+              .toLowerCase()
+              .contains(_searchController.text.toLowerCase())).toList();
+    }
 
-      bool matchesWeek = true;
-      if (appliedWeekOfMonth != 'All Weeks') {
-        int weekNum = int.parse(appliedWeekOfMonth.split(' ')[1]);
-        matchesWeek = _getWeekOfMonth(txDate) == weekNum;
-      }
+    if (appliedCategory != 'All Categories') {
+      list = list.where((tx) =>
+          (tx['categories']?['category_name'] ?? '') == appliedCategory).toList();
+    }
+    if (appliedWallet != 'All Wallets') {
+      list = list.where((tx) =>
+          (tx['wallets']?['wallet_name'] ?? '') == appliedWallet).toList();
+    }
+    if (appliedMin != null) {
+      list = list.where((tx) {
+        final amt = double.tryParse(tx['expense_amount']?.toString() ?? '0') ?? 0.0;
+        return amt >= appliedMin!;
+      }).toList();
+    }
 
-      return matchesTime && matchesWeek;
-    }).toList();
+    if (appliedMax != null) {
+      list = list.where((tx) {
+        final amt = double.tryParse(tx['expense_amount']?.toString() ?? '0') ?? 0.0;
+        return amt <= appliedMax!;
+      }).toList();
+    }
+
+    if (appliedSort == 'Amount (Highest - Lowest)') {
+      list.sort((a, b) => double.parse((b['expense_amount'] ?? '0').toString())
+          .compareTo(double.parse((a['expense_amount'] ?? '0').toString())));
+    } else if (appliedSort == 'Amount (Lowest - Highest)') {
+      list.sort((a, b) => double.parse((a['expense_amount'] ?? '0').toString())
+          .compareTo(double.parse((b['expense_amount'] ?? '0').toString())));
+    } else {
+      list.sort((a, b) =>
+          DateTime.parse(b['expense_date']).compareTo(DateTime.parse(a['expense_date'])));
+    }
+
+    return list;
   }
 
-  double get totalSummaryAmount {
-    return summaryFilteredExpenses.fold(0.0, (sum, item) {
-      return sum + (double.tryParse(item['amount'].toString()) ?? 0.0);
-    });
+  void _openAddExpenseDialog() async {
+    final provider = Provider.of<ExpenseProvider>(context, listen: false);
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AddExpenseBox(
+        walletOptions: provider.walletOptions,
+        categoryOptions: provider.categoryOptions,
+      ),
+    );
+    if (result != null) {
+      await provider.addExpense(result);
+    }
   }
 
-  Map<String, double> get summaryCategoryTotals {
+  void _updateExpense(int index) async {
+      final provider = Provider.of<ExpenseProvider>(context, listen: false);
+      final itemToEdit = filteredExpenses[index];
+      final result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (context) => AddExpenseBox(
+          initialData: itemToEdit,
+          walletOptions: provider.walletOptions,
+          categoryOptions: provider.categoryOptions,
+        ),
+      );
+      if (result != null) {
+        await provider.updateExpense(itemToEdit['expense_id'], result);
+        await provider.refresh();
+      }
+    }
+
+  void _confirmDelete(int index) {
+      final itemToDelete = filteredExpenses[index]; 
+      final String expenseId = itemToDelete['expense_id'].toString();
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+        backgroundColor:  const Color(0xFFFDF5E6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Confirm Delete', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+        content: const Text('Are you sure you want to remove this transaction?', style: TextStyle(color: AppColors.primaryText)),
+        actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: AppColors.secondaryText))),
+            ElevatedButton(
+              onPressed: () async {
+                await context.read<ExpenseProvider>().removeExpense(expenseId);
+                if (mounted) Navigator.pop(ctx);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    List<Map<String, dynamic>> get summaryFilteredExpenses {
+      final expenses = provider.expenses;
+      if (expenses.isEmpty) return [];
+      DateTime now = DateTime.now();
+
+      return expenses.where((tx) {
+        final txDateString = tx['expense_date'] as String?; 
+        if (txDateString == null) return false;
+        final txDate = DateTime.parse(txDateString);
+                
+        bool matchesTime = true;
+
+        if (selectedTimeFilter == 'Today') {
+          matchesTime = _isSameDay(txDate, now);
+        } else if (selectedTimeFilter == 'This Week') {
+          DateTime startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+          matchesTime = txDate.isAfter(startOfWeek.subtract(const Duration(seconds: 1)));
+        } else if (selectedTimeFilter == 'This Month') {
+          matchesTime = txDate.month == now.month && txDate.year == now.year;
+        } else if (selectedTimeFilter == 'Custom') {
+          if (filterYear != null) matchesTime &= (txDate.year == filterYear);
+          if (filterMonth != null) matchesTime &= (txDate.month == filterMonth);
+          if (filterDay != null) matchesTime &= (txDate.day == filterDay);
+        }
+
+        bool matchesWeek = true;
+        if (appliedWeekOfMonth != 'All Weeks') {
+          int weekNum = int.parse(appliedWeekOfMonth.split(' ')[1]);
+          matchesWeek = _getWeekOfMonth(txDate) == weekNum;
+        }
+
+        return matchesTime && matchesWeek;
+      }).toList();
+    }
+
+    Map<String, double> get summaryCategoryTotals {
     Map<String, double> totals = {};
     for (var tx in summaryFilteredExpenses) {
-      String cat = tx['category'] ?? 'Uncategorized';
-      double amt = double.tryParse(tx['amount'].toString()) ?? 0.0;
+      String cat = tx['categories']?['category_name'] ?? 'Uncategorized';
+      double amt = double.tryParse(tx['expense_amount'].toString()) ?? 0.0;
       totals[cat] = (totals[cat] ?? 0.0) + amt;
     }
     var sortedEntries = totals.entries.toList()
@@ -104,19 +218,27 @@ class _ManagePageState extends State<ManagePage> {
     return Map.fromEntries(sortedEntries);
   }
 
-  // filter expenses for the table
-  List<Map<String, dynamic>> get filteredExpenses {
+  double get totalSummaryAmount {
+    return summaryFilteredExpenses.fold(0.0, (sum, item) {
+      return sum + (double.tryParse(item['expense_amount'].toString()) ?? 0.0);
+    });
+  }
+
+ 
+
+  List<Map<String, dynamic>> get summaryFilteredExpense {
+    final expenses = provider.expenses;
     if (expenses.isEmpty) return [];
     List<Map<String, dynamic>> list = List.from(expenses);
 
     if (_searchController.text.isNotEmpty) {
-      list = list.where((tx) => (tx['item'] ?? '').toString().toLowerCase().contains(_searchController.text.toLowerCase())).toList();
+      list = list.where((tx) => (tx['expense_description'] ?? '').toString().toLowerCase().contains(_searchController.text.toLowerCase())).toList();
     }
 
     if (appliedCategory != 'All Categories') list = list.where((tx) => tx['category'] == appliedCategory).toList();
     if (appliedWallet != 'All Wallets') list = list.where((tx) => tx['wallet'] == appliedWallet).toList();
-    if (appliedMin != null) list = list.where((tx) => double.parse((tx['amount'] ?? '0').toString()) >= appliedMin!).toList();
-    if (appliedMax != null) list = list.where((tx) => double.parse((tx['amount'] ?? '0').toString()) <= appliedMax!).toList();
+    if (appliedMin != null) list = list.where((tx) => double.parse((tx['expense_amount'] ?? '0').toString()) >= appliedMin!).toList();
+    if (appliedMax != null) list = list.where((tx) => double.parse((tx['expense_amount'] ?? '0').toString()) <= appliedMax!).toList();
 
     DateTime now = DateTime.now();
     list = list.where((tx) {
@@ -207,7 +329,6 @@ class _ManagePageState extends State<ManagePage> {
     );
   }
 
-  // input box for the custom date
   Widget _buildDialogInput(String hint, TextEditingController ctrl, int max) {
     return TextField(
       controller: ctrl,
@@ -256,57 +377,28 @@ class _ManagePageState extends State<ManagePage> {
     });
   }
 
-  void _openAddExpenseDialog() async {
-    final result = await showDialog<Map<String, dynamic>>(context: context, builder: (context) => const AddExpenseBox());
-    if (result != null) setState(() => expenses.insert(0, result));
-  }
-
-  void _editExpense(int index) async {
-    final itemToEdit = filteredExpenses[index];
-    final originalIndex = expenses.indexOf(itemToEdit);
-    final result = await showDialog<Map<String, dynamic>>(context: context, builder: (context) => AddExpenseBox(initialData: itemToEdit));
-    if (result != null) setState(() => expenses[originalIndex] = result);
-  }
-
-  void _confirmDelete(int index) {
-    final itemToDelete = filteredExpenses[index];
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFFFDF5E6),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Confirm Delete', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText)),
-        content: const Text('Are you sure you want to remove this transaction?', style: TextStyle(color: AppColors.primaryText)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: AppColors.secondaryText))),
-          ElevatedButton(
-            onPressed: () { setState(() => expenses.remove(itemToDelete)); Navigator.pop(ctx); },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final expenseProvider = Provider.of<ExpenseProvider>(context);
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const CustomNavBar(currentPage: 'MANAGE'),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(flex: 2, child: _buildMainContent()),
-              const SizedBox(width: 24),
-              Expanded(flex: 1, child: _buildSidebar()),
-            ],
-          ),
-        ),
-      ),
+      body: expenseProvider.isLoading 
+          ? const Center(child: CircularProgressIndicator(color: AppColors.navGreen))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(flex: 2, child: _buildMainContent()),
+                    const SizedBox(width: 24),
+                    Expanded(flex: 1, child: _buildSidebar()),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
@@ -379,7 +471,6 @@ class _ManagePageState extends State<ManagePage> {
     );
   }
 
-  // shows all expenses/transactions
   Widget _buildExpensesTable() {
     final displayList = filteredExpenses;
     return Table(
@@ -390,11 +481,11 @@ class _ManagePageState extends State<ManagePage> {
         for (int i = 0; i < displayList.length; i++) 
           _buildDataRow(
             i, 
-            DateFormat('MM/dd/yy').format(displayList[i]['date'] ?? DateTime.now()), 
-            (displayList[i]['item'] ?? '').toString(),
-            (displayList[i]['category'] ?? '').toString(),
-            (displayList[i]['wallet'] ?? '').toString(),
-            '₱${displayList[i]['amount'] ?? '0'}',
+            DateFormat('MM/dd/yy').format(DateTime.parse(displayList[i]['expense_date'])),
+            (displayList[i]['expense_description'] ?? '').toString(),
+            (displayList[i]['categories']?['category_name'] ?? '').toString(),
+            (displayList[i]['wallets']?['wallet_name'] ?? '').toString(),
+            '₱${displayList[i]['expense_amount'] ?? '0'}',
           ),
       ],
     );
@@ -427,7 +518,7 @@ class _ManagePageState extends State<ManagePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            IconButton(icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.primaryText), onPressed: () => _editExpense(index), constraints: const BoxConstraints(), padding: const EdgeInsets.all(8)),
+            IconButton(icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.primaryText), onPressed: () => _updateExpense(index), constraints: const BoxConstraints(), padding: const EdgeInsets.all(8)),
             const SizedBox(width: 4),
             IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent), onPressed: () => _confirmDelete(index), constraints: const BoxConstraints(), padding: const EdgeInsets.all(8)),
           ],
@@ -437,6 +528,7 @@ class _ManagePageState extends State<ManagePage> {
   }
 
   Widget _buildSidebar() {
+    final provider = Provider.of<ExpenseProvider>(context);
     return Column(
       children: [
         Container(
@@ -447,9 +539,17 @@ class _ManagePageState extends State<ManagePage> {
             children: [
               _buildFilterHeader(),
               _buildLabel("Category"),
-              _buildDropdown(value: selectedCategory, items: ['All Categories', 'Food & Dining', 'Transportation', 'Personal Use & Hygiene', 'School Supplies & Academic Fees', 'Recreation & Leisure', 'Utilities & Load'], onChanged: (val) => setState(() => selectedCategory = val!)),
+              _buildDropdown(
+                value: selectedCategory,
+                items: ['All Categories', ...provider.categoryOptions.map((c) => c['name']!)],
+                onChanged: (val) => setState(() => selectedCategory = val!),
+              ),
               _buildLabel("Wallets"),
-              _buildDropdown(value: selectedWallet, items: ['All Wallets', 'Cash', 'GCash'], onChanged: (val) => setState(() => selectedWallet = val!)),
+              _buildDropdown(
+                value: selectedWallet,
+                items: ['All Wallets', ...provider.walletOptions.map((w) => w['name']!)],
+                onChanged: (val) => setState(() => selectedWallet = val!),
+              ),
               _buildLabel("Week"),
               _buildDropdown(value: selectedWeekOfMonth, items: ['All Weeks', 'Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'], onChanged: (val) => setState(() => selectedWeekOfMonth = val!)),
               const SizedBox(height: 15),
@@ -542,21 +642,39 @@ class _ManagePageState extends State<ManagePage> {
     );
   }
 
-  Widget _buildDropdown({required String value, required List<String> items, required ValueChanged<String?> onChanged}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(color: Colors.white, border: Border.all(color: AppColors.borderColor), borderRadius: BorderRadius.circular(12)),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value, isExpanded: true, dropdownColor: Colors.white, 
-          icon: const Icon(Icons.expand_more, color: AppColors.primaryText), 
-          style: const TextStyle(color: AppColors.primaryText, fontSize: 14), 
-          items: items.map((i) => DropdownMenuItem(value: i, child: Text(i))).toList(), onChanged: onChanged
-        ),
+   Widget _buildDropdown({
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+  return Container(
+    height: 50, 
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.symmetric(horizontal: 14),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      border: Border.all(color: AppColors.borderColor),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: value,
+        isExpanded: true,
+        isDense: true, 
+        menuMaxHeight: 250,
+        dropdownColor: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        icon: const Icon(Icons.expand_more, color: AppColors.primaryText),
+        style: const TextStyle(color: AppColors.primaryText, fontSize: 14),
+        items: items.map((i) => DropdownMenuItem(
+          value: i, 
+          child: Text(i, overflow: TextOverflow.ellipsis)
+        )).toList(),
+        onChanged: onChanged,
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildFilterHeader() {
     return Row(
