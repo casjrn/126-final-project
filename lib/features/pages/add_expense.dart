@@ -4,8 +4,15 @@ import 'package:upesov/theme/upesov_theme.dart';
 
 class AddExpenseBox extends StatefulWidget {
   final Map<String, dynamic>? initialData; 
+  final List<Map<String, String>> walletOptions;  
+  final List<Map<String, String>> categoryOptions;
 
-  const AddExpenseBox({super.key, this.initialData});
+  const AddExpenseBox({
+    super.key, 
+    this.initialData, 
+    required this.walletOptions, 
+    required this.categoryOptions
+  });
 
   @override
   State<AddExpenseBox> createState() => _AddExpenseBoxState();
@@ -13,24 +20,27 @@ class AddExpenseBox extends StatefulWidget {
 
 class _AddExpenseBoxState extends State<AddExpenseBox> {
   late DateTime selectedDate;
-  String? selectedCategory;
-  String? selectedWallet;
+  String? selectedCategoryId;
+  String? selectedWalletId;
   bool _showErrors = false;
 
   late TextEditingController _amountController;
   late TextEditingController _itemController;
 
 
+
   @override
   void initState() {
     super.initState();
    
-    selectedDate = widget.initialData?['date'] ?? DateTime.now();
-    selectedCategory = widget.initialData?['category'];
-    selectedWallet = widget.initialData?['wallet'];
+    selectedDate = widget.initialData?['expense_date'] != null
+      ? DateTime.parse(widget.initialData!['expense_date'])
+      : DateTime.now();
+    selectedCategoryId = widget.initialData?['category_id'];
+    selectedWalletId = widget.initialData?['wallet_id'];
     
-    _amountController = TextEditingController(text: widget.initialData?['amount']?.toString() ?? '');
-    _itemController = TextEditingController(text: widget.initialData?['item'] ?? '');
+    _amountController = TextEditingController(text: widget.initialData?['expense_amount']?.toString() ?? '');
+    _itemController = TextEditingController(text: widget.initialData?['expense_description'] ?? '');
   }
 
   @override
@@ -53,18 +63,17 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
   }
   
   void _handleSave() {
-    setState(() => _showErrors = true);
+  setState(() => _showErrors = true);
     final String amount = _amountController.text.trim();
-    if (amount.isEmpty || selectedCategory == null || selectedWallet == null) return;
-
+    if (amount.isEmpty || selectedCategoryId == null || selectedWalletId == null)  return;
     Navigator.pop(context, {
-      'date': selectedDate,
-      'item': _itemController.text.isEmpty ? 'No existing item' : _itemController.text,
-      'category': selectedCategory,
-      'wallet': selectedWallet,
-      'amount': amount,
+      'expense_date': selectedDate.toIso8601String(), 
+      'expense_description': _itemController.text.isEmpty ? 'No item description' : _itemController.text,
+      'category_id': selectedCategoryId, 
+      'wallet_id': selectedWalletId,     
+      'expense_amount': double.tryParse(amount) ?? 0.0, 
     });
-  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -127,10 +136,9 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
   }
 
   Widget _buildSidebarSection() {
-    bool isMissingFields = _showErrors && (_amountController.text.isEmpty || selectedCategory == null || selectedWallet == null);
+    bool isMissingFields = _showErrors && (_amountController.text.isEmpty || selectedCategoryId == null || selectedWalletId == null);
     return Column(
       children: [
-        //_buildBudgetFeedback(),
         if (isMissingFields) ...[
           const SizedBox(height: 16),
           Container(
@@ -176,7 +184,15 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
     );
   }
 
-  Widget _buildDropdownField({required String label, required IconData icon, required String hint, required List<String> items, required String? selectedValue, required bool hasError, required ValueChanged<String?> onChanged}) {
+  Widget _buildDropdownField({
+    required String label,
+    required IconData icon,
+    required String hint,
+    required List<String> items,
+    required String? selectedValue, 
+    required bool hasError,
+    required ValueChanged<String?> onChanged,
+  }) {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,14 +200,30 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
           _fieldLabel(label, icon),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            initialValue: selectedValue, 
+            initialValue: items.contains(selectedValue) ? selectedValue : null,
             isExpanded: true,
+            isDense: true, 
+            menuMaxHeight: 300, 
             hint: Text(hint, style: const TextStyle(color: AppColors.secondaryText, fontSize: 13)),
             dropdownColor: Colors.white,
+            borderRadius: BorderRadius.circular(12),
             style: const TextStyle(color: AppColors.primaryText, fontSize: 14),
             icon: const Icon(Icons.expand_more, color: AppColors.primaryText),
-            decoration: _inputDecoration('', hasError).copyWith(fillColor: Colors.white, filled: true),
-            items: items.map((String item) => DropdownMenuItem<String>(value: item, child: Text(item, overflow: TextOverflow.ellipsis))).toList(),
+            
+            decoration: _inputDecoration('', hasError).copyWith(
+              fillColor: Colors.white, 
+              filled: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+            items: items.toSet().map((String item) {
+              return DropdownMenuItem<String>(
+                value: item,
+                child: Container(
+                  alignment: Alignment.centerLeft,
+                  child: Text(item, overflow: TextOverflow.ellipsis),
+                ),
+              );
+            }).toList(),
             onChanged: onChanged,
           ),
         ],
@@ -225,13 +257,20 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
             _buildTextField('Amount (PHP) *', Icons.payments_outlined, '0.00', _amountController, _showErrors && _amountController.text.isEmpty),
             const SizedBox(width: 16),
             _buildDropdownField(
-              label: 'Category *', 
-              icon: Icons.label_outline, 
+              label: 'Category *',
+              icon: Icons.label_outline,
               hint: 'Select a category...',
-              items: ['Food & Dining', 'Transportation', 'Personal Use & Hygiene', 'School Supplies & Academic Fees', 'Recreation & Leisure', 'Utilities & Load'],
-              selectedValue: selectedCategory,
-              hasError: _showErrors && selectedCategory == null,
-              onChanged: (val) => setState(() => selectedCategory = val),
+              items: widget.categoryOptions.map((e) => e['name']!).toList(),
+              selectedValue: widget.categoryOptions.any((e) => e['id'] == selectedCategoryId)
+                  ? widget.categoryOptions.firstWhere((e) => e['id'] == selectedCategoryId)['name']
+                  : null,
+              onChanged: (val) {
+                setState(() {
+                  final selected = widget.categoryOptions.firstWhere((e) => e['name'] == val);
+                  selectedCategoryId = selected['id'];
+                });
+              },
+              hasError: _showErrors && selectedCategoryId == null,
             ),
           ],
         ),
@@ -241,13 +280,20 @@ class _AddExpenseBoxState extends State<AddExpenseBox> {
             _buildDatePickerField('Date *', Icons.calendar_month_outlined),
             const SizedBox(width: 16),
             _buildDropdownField(
-              label: 'Wallet *', 
-              icon: Icons.account_balance_wallet_outlined, 
+              label: 'Wallet *',
+              icon: Icons.account_balance_wallet_outlined,
               hint: 'Select a wallet...',
-              items: ['Cash', 'Bank Account', 'GCash'],
-              selectedValue: selectedWallet,
-              hasError: _showErrors && selectedWallet == null,
-              onChanged: (val) => setState(() => selectedWallet = val),
+              items: widget.walletOptions.map((e) => e['name']!).toList(),
+              selectedValue: widget.walletOptions.any((e) => e['id'] == selectedWalletId)
+                  ? widget.walletOptions.firstWhere((e) => e['id'] == selectedWalletId)['name']
+                  : null,
+              onChanged: (val) {
+                setState(() {
+                  final selected = widget.walletOptions.firstWhere((e) => e['name'] == val);
+                  selectedWalletId = selected['id'];
+                });
+              },
+              hasError: _showErrors && selectedWalletId == null,
             ),
           ],
         ),
