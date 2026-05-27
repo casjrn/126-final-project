@@ -293,7 +293,7 @@ class _ManagePageState extends State<ManagePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: const CustomNavBar(currentPage: 'Manage'),
+      appBar: const CustomNavBar(currentPage: 'MANAGE'),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: IntrinsicHeight(

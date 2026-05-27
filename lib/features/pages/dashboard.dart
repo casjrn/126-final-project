@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; 
 import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import 'package:upesov/theme/upesov_theme.dart';
 import 'package:upesov/features/widgets/navbar.dart';
+import 'package:upesov/features/pages/add_expense.dart';
 import 'package:flutter/widget_previews.dart';
+
 
 @Preview(name: 'Dashboard Layout Preview')
 Widget previewDashboard() {
@@ -12,6 +16,17 @@ Widget previewDashboard() {
 class DashboardPage extends StatelessWidget {
   const DashboardPage({super.key});
 
+  void _openAddExpenseDialog(BuildContext context) async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => const AddExpenseBox(), // Your dialog widget
+    );
+    
+    if (result != null) {
+      // Handle the result if needed
+    }
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -35,17 +50,8 @@ class DashboardPage extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(padding: EdgeInsets.all(16.0),
-                        child: const Text(
-                          'Hello, User!',
-                          style: TextStyle(
-                          fontSize: 40,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primaryText,  
-                            ),
-                          ),
-                        ),
-
+                        _buildHeader(context),
+                        const SizedBox(height: 24),
                         _buildTotalSummaryCard(),
                         const SizedBox(height: 24),
                         _buildAnalyticsSection(),
@@ -59,9 +65,8 @@ class DashboardPage extends StatelessWidget {
                     flex: 1,
                     child: Column(
                     children:[ 
-                      const SizedBox(width: 12),
-                      _buildActionButton(Icons.add_card, "Add Money", () {}),
-                      const SizedBox(height: 35),
+                      
+                      const SizedBox(height: 80),
                       _buildQuickSelectSidebar(), 
                       ],
                     )
@@ -432,4 +437,36 @@ class DashboardPage extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildHeader(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween, // Pushes text left, button right
+      crossAxisAlignment: CrossAxisAlignment.center,      // Aligns them cleanly vertically
+      children: [
+        const Text(
+          'Hello, User!',
+          style: TextStyle(
+            fontSize: 40,
+            fontWeight: FontWeight.bold,
+            color: AppColors.primaryText,  
+          ),
+        ),  
+        ElevatedButton.icon(
+          onPressed: () => _openAddExpenseDialog(context),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.navGreen, 
+            foregroundColor: Colors.white, 
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18), 
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text(
+            'Add Expense',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+          ),
+        ),
+      ],
+    );
+  }
+
 }
