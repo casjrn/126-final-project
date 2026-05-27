@@ -76,6 +76,7 @@ class _DashboardPageState extends State<DashboardPage> {
           );
         }
         
+        // Deduct from a default source (e.g., Cash) and update global savings
         _walletBalances['Cash'] = (_walletBalances['Cash'] ?? 0.0) - amount;
         _amountSaved -= amount;
       });
@@ -106,6 +107,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        // Left Section: Title & Price labels
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -120,6 +122,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
                           ],
                         ),
+                        // Right Section: Interactive Dropdown layout selector
                         DropdownButton<String>(
                           value: selectedWallet,
                           dropdownColor: AppColors.cardBg,
@@ -150,10 +153,12 @@ class _DashboardPageState extends State<DashboardPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    // [Cancel Button]
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(false),
                       child: const Text('Cancel', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
                     ),
+                    // [Save Button]
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.navGreen,
@@ -172,6 +177,7 @@ class _DashboardPageState extends State<DashboardPage> {
       },
     );
 
+    // If the user chooses to complete the entry transaction
     if (shouldSave == true) {
       setState(() {
         if (_walletBalances.containsKey(selectedWallet)) {
@@ -210,6 +216,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+
                   // ===== LEFT AREA: MAIN TRACKING PANEL (75% Width) =====
                   Expanded(
                     flex: 3,
@@ -217,6 +224,9 @@ class _DashboardPageState extends State<DashboardPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildHeader(context),
+                        const SizedBox(height: 24),
+                        const Divider(color: AppColors.borderColor, thickness: 1, height: 40),
+                        _buildDateHeader('Overview Tracker'), 
                         const SizedBox(height: 24),
                         _buildTotalSummaryCard(),
                         const SizedBox(height: 24),
@@ -244,7 +254,45 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // ===== LEFT SIDE BUILDERS =====
+  // Pure isolated widget structure resolving the date alignment issue layout error
+  Widget _buildDateHeader(String title) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title, 
+          style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primaryText),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border.all(color: AppColors.borderColor), 
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.calendar_today_outlined, size: 24, color: AppColors.primaryText),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    DateFormat('MMMM dd, yyyy').format(DateTime.now()), 
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primaryText),
+                  ),
+                  Text(
+                    DateFormat('hh:mm a').format(DateTime.now()), 
+                    style: const TextStyle(fontSize: 12, color: AppColors.secondaryText),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTotalSummaryCard() {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -257,7 +305,7 @@ class _DashboardPageState extends State<DashboardPage> {
         spacing: 24,
         runSpacing: 24,
         children: [
-          // ===== SPENDING SUMMARY CARD WITH EMBEDDED DATE =====
+          // ===== SPENDING PANEL COLLATERAL =====
           SizedBox(
             width: 500,
             child: Container(
@@ -270,42 +318,9 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Title and Date/Time wrapped together side-by-side
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Spending Summary',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryText),
-                      ),
-                      // Integrated Date & Time Widget
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: AppColors.borderColor), 
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.calendar_today_outlined, size: 16, color: AppColors.primaryText),
-                            const SizedBox(width: 6),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  DateFormat('MMMM dd, yyyy').format(DateTime.now()), 
-                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryText),
-                                ),
-                                Text(
-                                  DateFormat('hh:mm a').format(DateTime.now()), 
-                                  style: const TextStyle(fontSize: 9, color: AppColors.secondaryText),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  const Text(
+                    'Spending Summary',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryText),
                   ),
                   const SizedBox(height: 20),
                   Wrap(
@@ -496,7 +511,7 @@ class _DashboardPageState extends State<DashboardPage> {
             children: [
               _buildQuickSelectItem('Trike Fare', 15.00, 'Transport', Icons.directions_bike),
               _buildQuickSelectItem('Vnyrd Combo Meal', 69.00, 'Food', Icons.fastfood),
-              _buildQuickSelectItem('Jeepney to City', 55.00, 'Transport', Icons.directions_bus),
+              _buildQuickSelectItem('Jeepney 5o City', 55.00, 'Transport', Icons.directions_bus),
               _buildQuickSelectItem('Photocopy', 5.00, 'School', Icons.print),
             ],
           ),
@@ -554,7 +569,7 @@ class _DashboardPageState extends State<DashboardPage> {
           'Hello, User!',
           style: TextStyle(
             fontSize: 40,
-            fontWeight: FontWeight.bold, 
+            fontWeight: FontWeight.bold,
             color: AppColors.primaryText,  
           ),
         ),  
