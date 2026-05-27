@@ -111,14 +111,14 @@ class _BudgetPageState extends State<BudgetPage> {
                 controller: amountController,
                 style: const TextStyle(color: AppColors.primaryText),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: "Amount to Add", prefixText: "₱ "),
+                decoration: const InputDecoration(labelText: "Amount to be Added", prefixText: "₱ "),
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<Map<String, dynamic>>(
                 dropdownColor: Colors.white,
                 style: const TextStyle(color: AppColors.primaryText),
                 decoration: const InputDecoration(
-                  labelText: "Select Wallet",
+                  labelText: "Select Wallet to Add Savings",
                   labelStyle: TextStyle(color: AppColors.secondaryText),
                 ),
                 initialValue: selectedWallet,
@@ -138,8 +138,8 @@ class _BudgetPageState extends State<BudgetPage> {
                   // STEP 1: Update Savings Goal in DB
                   await goalProv.addSavings(amount);
 
-                  // STEP 2: Deduct from selected Wallet in DB
-                  await walletProv.deductMoney(
+                  // STEP 2: Add from selected Wallet in DB
+                  await walletProv.addMoney(
                     selectedWallet!['wallet_id'].toString(),
                     (selectedWallet!['wallet_balance'] as num).toDouble(),
                     amount,
