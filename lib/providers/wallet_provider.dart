@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; 
 import '../services/wallet_service.dart';
 
 class WalletProvider extends ChangeNotifier {
@@ -10,19 +11,32 @@ class WalletProvider extends ChangeNotifier {
   List<Map<String, dynamic>> get wallets => _wallets;
   bool get isLoading => _isLoading;
 
-  // Calculate total balance across all wallets
-  double get totalBalance => _wallets.fold(0.0, (sum, w) => sum + (w['wallet_balance'] ?? 0));
+  double get totalBalance => _wallets.fold(0.0, (sum, w) {
+    final val = w['wallet_balance'] ?? 0;
+    return sum + val.toDouble();
+  });
 
-  // The method your Setup Page will call
+  void _setLoading(bool value) {
+    _isLoading = value;
+    notifyListeners();
+  }
+
+  Future<void> refresh() async {
+    try {
+      _wallets = await _service.fetchWallets();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Refresh failed: $e");
+    }
+  }
+
   Future<void> addWallet({
     required String userId,
     required String name,
     required String type,
     required double balance,
   }) async {
-    _isLoading = true;
-    notifyListeners();
-
+    _setLoading(true);
     try {
       await _service.createWallet(
         userId: userId,
@@ -30,16 +44,54 @@ class WalletProvider extends ChangeNotifier {
         type: type,
         balance: balance,
       );
-      await refresh(); // Automatically fetch the latest data
+      await refresh();  
+    } catch (e) {
+      debugPrint("Add wallet failed: $e");
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      _setLoading(false);
     }
   }
 
-  // Pull fresh data from Supabase
-  Future<void> refresh() async {
-    _wallets = await _service.fetchWallets();
-    notifyListeners();
+  // 1. ADD MONEY LOGIC
+  Future<void> addMoney(String walletId, double currentBalance, double amountToAdd) async {
+    _setLoading(true);
+    try {
+      final newBalance = currentBalance + amountToAdd;
+      await Supabase.instance.client
+          .from('wallets')
+          .update({'wallet_balance': newBalance})
+          .eq('wallet_id', walletId); // FIXED: Changed 'id' to 'wallet_id'
+      
+      await refresh();  
+    } catch (e) {
+      debugPrint("Error adding money: $e");
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // 2. TRANSFER MONEY LOGIC (RPC VERSION)
+  Future<void> transferMoney({
+    required String fromId,
+    required String toId,
+    required double amount,
+  }) async {
+    _setLoading(true);
+    try {
+      await Supabase.instance.client.rpc(
+        'transfer_money',
+        params: {
+          'from_wallet_id': fromId,
+          'to_wallet_id': toId,
+          'amount': amount,
+        },
+      );
+      await refresh();  
+    } catch (e) {
+      debugPrint("Transfer failed: $e");
+      rethrow;  
+    } finally {
+      _setLoading(false);
+    }
   }
 }
