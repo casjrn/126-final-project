@@ -19,6 +19,7 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => WalletProvider()),
+        ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         // GoalProvider
       ],
       child: const MyApp(),
