@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter/widget_previews.dart';
+
 import 'package:upesov/theme/upesov_theme.dart';
 import 'package:upesov/features/widgets/navbar.dart';
 import 'package:upesov/features/pages/add_expense.dart';
-import 'package:flutter/widget_previews.dart';
+import 'package:upesov/providers/expense_provider.dart';
+import 'package:upesov/providers/wallet_provider.dart';
+import 'package:upesov/providers/goal_provider.dart';
 
 @Preview(name: 'Dashboard Layout Preview')
 Widget previewDashboard() {
@@ -33,59 +37,74 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  // 1. State data for your Spending Chart
-  List<ExpenseItem> _spendingItems = [
-    ExpenseItem(category: 'Food', amount: 500, color: Colors.deepPurple),
-    ExpenseItem(category: 'Transport', amount: 250, color: Colors.lightGreenAccent),
-    ExpenseItem(category: 'School', amount: 150, color: Colors.pinkAccent),
-    ExpenseItem(category: 'Others', amount: 50, color: Colors.white),
+  // Pre-defined palette for dynamic category chart colors
+  final List<Color> _chartColors = [
+    AppColors.darkGreen,
+    Colors.lightGreenAccent,
+    Colors.pinkAccent,
+    Colors.amber,
+    Colors.cyan,
+    Colors.orangeAccent,
   ];
 
-  // 2. State data for global savings tracking
-  double _amountSaved = 5000;
-  final double _targetAmount = 10000;
-
-  // 3. State data for user wallets
-  final Map<String, double> _walletBalances = {
-    'Cash': 2500.0,
-    'GCash': 1500.0,
-    'Bank Account': 1000.0,
-  };
+  @override
+  void initState() {
+    super.initState();
+    // Fetch initial data just in case they aren't loaded
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ExpenseProvider>().refresh();
+      context.read<WalletProvider>().refresh();
+      context.read<GoalProvider>().fetchGoal(); // Ensure goals are fetched too
+    });
+  }
 
   // Handles the primary "Add Expense" button action
   void _openAddExpenseDialog(BuildContext context) async {
+    final expenseProv = context.read<ExpenseProvider>();
+    final walletProv = context.read<WalletProvider>();
+
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => const AddExpenseBox(),
+      builder: (context) => AddExpenseBox(
+        walletOptions: expenseProv.walletOptions,
+        categoryOptions: expenseProv.categoryOptions,
+      ),
     );
     
-    if (result != null && result.containsKey('category') && result.containsKey('amount')) {
-      final String category = result['category'];
-      final double amount = double.tryParse(result['amount'].toString()) ?? 0.0;
+    if (result != null) {
+      // 1. Log the expense to Supabase
+      await expenseProv.addExpense(result);
 
-      setState(() {
-        final existingIndex = _spendingItems.indexWhere(
-          (item) => item.category.toLowerCase() == category.toLowerCase()
-        );
-        
-        if (existingIndex != -1) {
-          _spendingItems[existingIndex].amount += amount;
-        } else {
-          _spendingItems.add(
-            ExpenseItem(category: category, amount: amount, color: Colors.amber),
-          );
-        }
-        
-        // Deduct from a default source (e.g., Cash) and update global savings
-        _walletBalances['Cash'] = (_walletBalances['Cash'] ?? 0.0) - amount;
-        _amountSaved -= amount;
-      });
+      // 2. Automatically deduct from the selected wallet
+      final walletId = result['wallet_id'];
+      final amount = result['expense_amount'];
+      
+      final wallet = walletProv.wallets.firstWhere(
+        (w) => w['wallet_id'].toString() == walletId.toString(),
+        orElse: () => {}
+      );
+
+      if (wallet.isNotEmpty) {
+        final currentBalance = double.tryParse(wallet['wallet_balance'].toString()) ?? 0.0;
+        await walletProv.deductMoney(walletId.toString(), currentBalance, amount);
+      }
     }
   }
 
   // Opens the pop-up confirmation menu when a Quick Select option button is tapped
-  void _openQuickSelectPopup(BuildContext context, String itemTitle, double cost, String itemCategory) async {
-    String selectedWallet = _walletBalances.keys.first;
+  void _openQuickSelectPopup(BuildContext context, String itemTitle, double cost, String itemCategoryName) async {
+    final expenseProv = context.read<ExpenseProvider>();
+    final walletProv = context.read<WalletProvider>();
+
+    if (walletProv.wallets.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add a wallet first.', style: TextStyle(color: Colors.white))),
+      );
+      return;
+    }
+
+    // Default to the first available wallet
+    String selectedWalletId = walletProv.wallets.first['wallet_id'].toString();
 
     final bool? shouldSave = await showDialog<bool>(
       context: context,
@@ -96,7 +115,7 @@ class _DashboardPageState extends State<DashboardPage> {
               backgroundColor: AppColors.cardBg,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: const Text(
-                'Confirm Quick Purchase',
+                'Confirm Logging Expense',
                 style: TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.bold),
               ),
               content: SizedBox(
@@ -122,23 +141,27 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
                           ],
                         ),
-                        // Right Section: Interactive Dropdown layout selector
+                        // Right Section: Interactive Dropdown layout selector from real wallets
                         DropdownButton<String>(
-                          value: selectedWallet,
+                          value: selectedWalletId,
                           dropdownColor: AppColors.cardBg,
                           icon: const Icon(Icons.arrow_drop_down, color: AppColors.secondaryText),
                           style: const TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.w600),
                           underline: Container(height: 1, color: AppColors.borderColor),
-                          items: _walletBalances.keys.map((String walletName) {
+                          items: walletProv.wallets.map((wallet) {
+                            final wId = wallet['wallet_id'].toString();
+                            final wName = wallet['wallet_name'].toString();
+                            final wBal = double.tryParse(wallet['wallet_balance'].toString()) ?? 0.0;
+                            
                             return DropdownMenuItem<String>(
-                              value: walletName,
-                              child: Text('$walletName (₱${_walletBalances[walletName]!.toStringAsFixed(0)})'),
+                              value: wId,
+                              child: Text('$wName (₱${wBal.toStringAsFixed(0)})'),
                             );
                           }).toList(),
                           onChanged: (String? newValue) {
                             if (newValue != null) {
                               setDialogState(() {
-                                selectedWallet = newValue;
+                                selectedWalletId = newValue;
                               });
                             }
                           },
@@ -153,12 +176,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // [Cancel Button]
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(false),
                       child: const Text('Cancel', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
                     ),
-                    // [Save Button]
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.navGreen,
@@ -166,7 +187,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                       ),
                       onPressed: () => Navigator.of(context).pop(true),
-                      child: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      child: const Text('Log Fast', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -179,29 +200,89 @@ class _DashboardPageState extends State<DashboardPage> {
 
     // If the user chooses to complete the entry transaction
     if (shouldSave == true) {
-      setState(() {
-        if (_walletBalances.containsKey(selectedWallet)) {
-          _walletBalances[selectedWallet] = _walletBalances[selectedWallet]! - cost;
-          _amountSaved -= cost;
-        }
+      try {
+        debugPrint("Attempting Quick Log: $itemTitle - $itemCategoryName");
 
-        final existingIndex = _spendingItems.indexWhere(
-          (item) => item.category.toLowerCase() == itemCategory.toLowerCase()
+        // Safely map the UI string to the Database Category
+        final catOpt = expenseProv.categoryOptions.firstWhere(
+          (c) {
+            final dbCatName = (c['name'] ?? c['category_name'] ?? '').toString().toLowerCase().trim();
+            return dbCatName == itemCategoryName.toLowerCase().trim();
+          },
+          orElse: () {
+            debugPrint("Category '$itemCategoryName' not found in database!");
+            return {};
+          }
         );
+        
+        final String categoryId = (catOpt['id'] ?? catOpt['category_id'] ?? '').toString();
+        
+        if (categoryId.isNotEmpty) {
+          // 1. Add to Expense table
+          await expenseProv.addExpense({
+            'expense_date': DateTime.now().toIso8601String(),
+            'expense_description': itemTitle,
+            'category_id': categoryId,
+            'wallet_id': selectedWalletId,
+            'expense_amount': cost,
+          });
 
-        if (existingIndex != -1) {
-          _spendingItems[existingIndex].amount += cost;
+          // 2. Deduct from Wallet table
+          final wallet = walletProv.wallets.firstWhere((w) => w['wallet_id'].toString() == selectedWalletId);
+          final currentBalance = double.tryParse(wallet['wallet_balance'].toString()) ?? 0.0;
+          await walletProv.deductMoney(selectedWalletId, currentBalance, cost);
+
+          debugPrint("Quick Log Successful!");
+          
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Expense logged successfully!', style: TextStyle(color: Colors.white))),
+            );
+          }
         } else {
-          _spendingItems.add(
-            ExpenseItem(category: itemCategory, amount: cost, color: Colors.amber),
-          );
+          debugPrint("Failed to log: Category ID is empty.");
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: Category "$itemCategoryName" not found in database.', style: const TextStyle(color: Colors.white))),
+            );
+          }
         }
-      });
+      } catch (e) {
+        debugPrint("Quick Select Error: $e");
+      }
     }
+  }
+
+  // Helper method to calculate dynamic spending lists
+  List<ExpenseItem> _getDynamicSpendingItems(ExpenseProvider expenseProv) {
+    Map<String, double> totals = {};
+    
+    for (var exp in expenseProv.expenses) {
+      final category = exp['categories']?['category_name'] ?? 'Others';
+      final amount = double.tryParse(exp['expense_amount']?.toString() ?? '0') ?? 0.0;
+      totals[category] = (totals[category] ?? 0.0) + amount;
+    }
+
+    int colorIndex = 0;
+    return totals.entries.map((entry) {
+      final color = _chartColors[colorIndex % _chartColors.length];
+      colorIndex++;
+      return ExpenseItem(category: entry.key, amount: entry.value, color: color);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Watch providers to trigger automatic UI repaints
+    final expenseProv = context.watch<ExpenseProvider>();
+    final goalProv = context.watch<GoalProvider>();
+    
+    final spendingItems = _getDynamicSpendingItems(expenseProv);
+    
+    // Explicitly binding variables for Total Savings and Weekly Goal
+    final totalSavings = goalProv.cumulativeAmount;; 
+    final weeklyGoal = goalProv.targetAmount; 
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const CustomNavBar(currentPage: 'DASHBOARD'),
@@ -216,7 +297,6 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
                   // ===== LEFT AREA: MAIN TRACKING PANEL (75% Width) =====
                   Expanded(
                     flex: 3,
@@ -226,11 +306,14 @@ class _DashboardPageState extends State<DashboardPage> {
                         _buildHeader(context),
                         const SizedBox(height: 24),
                         const Divider(color: AppColors.borderColor, thickness: 1, height: 40),
-                        _buildDateHeader('Overview Tracker'), 
+                        
+                        const Text(
+                          'Overview Tracker', 
+                          style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primaryText),
+                        ), 
+
                         const SizedBox(height: 24),
-                        _buildTotalSummaryCard(),
-                        const SizedBox(height: 24),
-                        _buildAnalyticsSection(),
+                        _buildTotalSummaryCard(spendingItems, totalSavings, weeklyGoal),
                       ],
                     ),
                   ),
@@ -239,8 +322,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   Expanded(
                     flex: 1,
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SizedBox(height: 80),
+                        _buildDateTimeCard(), // Moved here above Quick Select
+                        const SizedBox(height: 24),
                         _buildQuickSelectSidebar(),
                       ],
                     ),
@@ -254,46 +339,39 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // Pure isolated widget structure resolving the date alignment issue layout error
-  Widget _buildDateHeader(String title) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title, 
-          style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primaryText),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.borderColor), 
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
+  // New Date & Time Card Widget
+  Widget _buildDateTimeCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        border: Border.all(color: AppColors.borderColor), 
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.calendar_today_outlined, size: 28, color: AppColors.primaryText),
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.calendar_today_outlined, size: 24, color: AppColors.primaryText),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    DateFormat('MMMM dd, yyyy').format(DateTime.now()), 
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primaryText),
-                  ),
-                  Text(
-                    DateFormat('hh:mm a').format(DateTime.now()), 
-                    style: const TextStyle(fontSize: 12, color: AppColors.secondaryText),
-                  ),
-                ],
+              Text(
+                DateFormat('MMMM dd, yyyy').format(DateTime.now()), 
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryText),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                DateFormat('hh:mm a').format(DateTime.now()), 
+                style: const TextStyle(fontSize: 13, color: AppColors.secondaryText),
               ),
             ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildTotalSummaryCard() {
+  Widget _buildTotalSummaryCard(List<ExpenseItem> spendingItems, double totalSavings, double weeklyGoal) {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -329,34 +407,41 @@ class _DashboardPageState extends State<DashboardPage> {
                     alignment: WrapAlignment.center,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      // Renders dynamic segment items on the Pie chart
                       SizedBox(
                         width: 180,
                         height: 180,
-                        child: PieChart(
-                          PieChartData(
-                            sectionsSpace: 2,
-                            centerSpaceRadius: 0,
-                            sections: _spendingItems.map((item) {
-                              return PieChartSectionData(
-                                value: item.amount,
-                                color: item.color,
-                                radius: 60,
-                                showTitle: false,
-                              );
-                            }).toList(),
-                          ),
-                        ),
+                        child: spendingItems.isEmpty 
+                            ? const Center(child: Text('No Data', style: TextStyle(color: AppColors.secondaryText)))
+                            : PieChart(
+                                PieChartData(
+                                  sectionsSpace: 2,
+                                  centerSpaceRadius: 0,
+                                  sections: spendingItems.map((item) {
+                                    return PieChartSectionData(
+                                      value: item.amount,
+                                      color: item.color,
+                                      radius: 60,
+                                      showTitle: false,
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
                       ),
                       // Dynamic List Legend tracking
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: _spendingItems.map((item) {
+                        children: spendingItems.map((item) {
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 10.0),
-                            child: Text(
-                              '${item.category}: ₱${item.amount.toStringAsFixed(0)}',
-                              style: const TextStyle(color: AppColors.primaryText),
+                            child: Row(
+                              children: [
+                                Container(width: 10, height: 10, decoration: BoxDecoration(color: item.color, shape: BoxShape.circle)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${item.category}: ₱${item.amount.toStringAsFixed(0)}',
+                                  style: const TextStyle(color: AppColors.primaryText, fontWeight: FontWeight.w500),
+                                ),
+                              ],
                             ),
                           );
                         }).toList(),
@@ -382,7 +467,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Savings Summary',
+                    'Saving Summary',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryText),
                   ),
                   const SizedBox(height: 20),
@@ -401,15 +486,16 @@ class _DashboardPageState extends State<DashboardPage> {
                             sectionsSpace: 2,
                             centerSpaceRadius: 20,
                             sections: [
+                              // Donut fill logic based on totalSavings vs weeklyGoal
                               PieChartSectionData(
-                                value: _amountSaved < 0 ? 0 : _amountSaved,
-                                color: Colors.deepPurple,
+                                value: totalSavings < 0 ? 0 : totalSavings,
+                                color: AppColors.darkGreen,
                                 radius: 55,
                                 showTitle: false,
                               ),
                               PieChartSectionData(
-                                value: (_targetAmount - _amountSaved) < 0 ? 0 : (_targetAmount - _amountSaved),
-                                color: Colors.white.withOpacity(0.2),
+                                value: (weeklyGoal - totalSavings) < 0 ? 0 : (weeklyGoal - totalSavings),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 radius: 55,
                                 showTitle: false,
                               ),
@@ -422,59 +508,23 @@ class _DashboardPageState extends State<DashboardPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text(
-                            'Amount Saved:',
+                            'Total Savings:', 
                             style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.primaryText),
                           ),
                           const SizedBox(height: 4),
-                          Text('₱${NumberFormat('#,###').format(_amountSaved)}', style: const TextStyle(color: AppColors.primaryText)),
+                          Text('₱${NumberFormat('#,###').format(totalSavings)}', style: const TextStyle(color: AppColors.primaryText)),
                           const SizedBox(height: 20),
                           const Text(
-                            'Target Amount:',
+                            'Weekly Savings Goal:', 
                             style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.primaryText),
                           ),
                           const SizedBox(height: 4),
-                          Text('₱${NumberFormat('#,###').format(_targetAmount)}', style: const TextStyle(color: AppColors.primaryText)),
+                          Text('₱${NumberFormat('#,###').format(weeklyGoal)}', style: const TextStyle(color: AppColors.primaryText)),
                         ],
                       ),
                     ],
                   ),
                 ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnalyticsSection() {
-    return Container(
-      width: double.infinity,
-      height: 380, 
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.borderColor),
-      ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Expense Analytics',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryText),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Visual breakdown of weekly spending trends',
-            style: TextStyle(fontSize: 12, color: AppColors.secondaryText),
-          ),
-          Expanded(
-            child: Center(
-              child: Icon(
-                Icons.insert_chart_outlined,
-                size: 80,
-                color: AppColors.secondaryText,
               ),
             ),
           ),
@@ -501,7 +551,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Common UPV purchases',
+            'Common UPV expenses',
             style: TextStyle(fontSize: 12, color: AppColors.secondaryText),
           ),
           const SizedBox(height: 20),
@@ -509,10 +559,10 @@ class _DashboardPageState extends State<DashboardPage> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              _buildQuickSelectItem('Trike Fare', 15.00, 'Transport', Icons.directions_bike),
-              _buildQuickSelectItem('Vnyrd Combo Meal', 69.00, 'Food', Icons.fastfood),
-              _buildQuickSelectItem('Jeepney 5o City', 55.00, 'Transport', Icons.directions_bus),
-              _buildQuickSelectItem('Photocopy', 5.00, 'School', Icons.print),
+              _buildQuickSelectItem('Trike Fare', 15.00, 'Transportation', Icons.directions_bike),
+              _buildQuickSelectItem('Vnyrd Combo Meal', 69.00, 'Food & Dining', Icons.fastfood),
+              _buildQuickSelectItem('Jeepney to City', 55.00, 'Transportation', Icons.directions_bus),
+              _buildQuickSelectItem('Photocopy', 5.00, 'School Supplies & Academic Fees', Icons.print),
             ],
           ),
         ],
