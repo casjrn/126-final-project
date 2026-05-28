@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:upesov/theme/upesov_theme.dart';
 import 'package:upesov/features/widgets/navbar.dart';
 import 'package:upesov/providers/wallet_provider.dart';
@@ -16,10 +17,15 @@ class WalletsController {
   BuildContext get context => state.context;
 
   // Data State
-  final List<String> logs = [];
+  List<String> logs = []; // Removed 'final' so we can overwrite it when loading
   String? errorMessage;
 
+  // Storage Key
+  static const String _logsKey = 'wallet_activity_logs';
+
   void init() {
+    _loadLogs(); // Load saved logs when the page initializes
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (state.mounted) {
         context.read<WalletProvider>().refresh();
@@ -27,7 +33,25 @@ class WalletsController {
     });
   }
 
-  // Formatting Logic
+  // --- Local Storage Logic ---
+  
+  Future<void> _loadLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedLogs = prefs.getStringList(_logsKey) ?? [];
+    
+    if (state.mounted) {
+      // ignore: invalid_use_of_protected_member
+      state.setState(() => logs = savedLogs);
+    }
+  }
+
+  Future<void> _saveLogs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_logsKey, logs);
+  }
+
+  // --- Formatting Logic ---
+  
   String formatCurrency(double v) {
     return v.toStringAsFixed(2).replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+$)'), 
@@ -45,7 +69,8 @@ class WalletsController {
     state.setState(() => errorMessage = error);
   }
 
-  // Logic Actions
+  // --- Logic Actions ---
+  
   Future<void> addWallet({required String name, required String type, required double balance}) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
@@ -83,7 +108,17 @@ class WalletsController {
 
   void _updateLogs(String message) {
     // ignore: invalid_use_of_protected_member
-    state.setState(() => logs.insert(0, message));
+    state.setState(() {
+      logs.insert(0, message);
+      
+      // Optional: Cap the logs at 50 to prevent infinite memory growth over time
+      if (logs.length > 50) {
+        logs.removeLast();
+      }
+    });
+    
+    // Save to local storage whenever a new log is added
+    _saveLogs(); 
   }
 }
 

@@ -30,6 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  shared_preferences: ^2.2.2
 
   #for mapping/managing wallets and goals
   provider: ^6.1.1

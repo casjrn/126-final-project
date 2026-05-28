@@ -118,7 +118,11 @@ class CustomNavBar extends StatelessWidget implements PreferredSizeWidget {
           // ---- pushReplacement to not create an infinite "back" stack on web ----
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => destination),
+          PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) => destination,
+              transitionDuration: Duration.zero,
+              reverseTransitionDuration: Duration.zero,
+            ),
           );
         },
         child: Text(
