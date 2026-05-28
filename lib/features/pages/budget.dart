@@ -129,14 +129,14 @@ class _BudgetPageState extends State<BudgetPage> {
                 controller: amountController,
                 style: const TextStyle(color: AppColors.primaryText),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: "Amount to Add", prefixText: "₱ "),
+                decoration: const InputDecoration(labelText: "Amount to be Added", prefixText: "₱ "),
               ),
               const SizedBox(height: 20),
               DropdownButtonFormField<Map<String, dynamic>>(
                 dropdownColor: Colors.white,
                 style: const TextStyle(color: AppColors.primaryText),
                 decoration: const InputDecoration(
-                  labelText: "Select Wallet",
+                  labelText: "Select Wallet to Add Savings",
                   labelStyle: TextStyle(color: AppColors.secondaryText),
                 ),
                 items: walletProv.wallets.map((w) => DropdownMenuItem<Map<String, dynamic>>(value: w, child: Text(w['wallet_name'] ?? 'Unnamed Wallet'))).toList(),
@@ -152,6 +152,8 @@ class _BudgetPageState extends State<BudgetPage> {
                 final amount = double.tryParse(amountController.text) ?? 0.0;
                 if (amount > 0 && selectedWallet != null) {
                   await goalProv.addSavings(amount);
+
+                  // STEP 2: Add from selected Wallet in DB
                   await walletProv.addMoney(
                     selectedWallet!['wallet_id'].toString(),
                     (selectedWallet!['wallet_balance'] as num).toDouble(),

@@ -33,8 +33,6 @@ class GoalProvider extends ChangeNotifier {
     }
   }
 
-// goal_provider.dart
-
   Future<void> addSavings(double amount) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
@@ -43,7 +41,6 @@ class GoalProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // We pass target: targetAmount to satisfy the DB constraint
       await _service.addSavings(
         userId: user.id,
         amount: amount,
@@ -51,7 +48,7 @@ class GoalProvider extends ChangeNotifier {
         cumulative: cumulativeAmount,
         target: targetAmount, 
       );
-      await fetchGoal(); // Refresh the UI with new data
+      await fetchGoal();
     } catch (e) {
       debugPrint("Add Savings Error: $e");
     } finally {
