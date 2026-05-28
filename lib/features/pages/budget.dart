@@ -5,6 +5,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import 'package:upesov/providers/goal_provider.dart';
 import 'package:upesov/providers/wallet_provider.dart';
+import 'package:upesov/providers/expense_provider.dart'; 
+import 'package:upesov/providers/budget_provider.dart'; 
 
 class BudgetPage extends StatefulWidget {
   const BudgetPage({super.key});
@@ -14,7 +16,6 @@ class BudgetPage extends StatefulWidget {
 }
 
 class _BudgetPageState extends State<BudgetPage> {
- 
   bool _isBudgetSet = false;
 
   double get _currentPhysicalCash => context.watch<WalletProvider>().cashBalance;
@@ -25,23 +26,40 @@ class _BudgetPageState extends State<BudgetPage> {
   }
 
   final List<Map<String, dynamic>> _categories = [
-    {'name': 'Food & Dining', 'pct': 0.0, 'act': 0.0},
-    {'name': 'Transportation', 'pct': 0.0, 'act': 0.0},
-    {'name': 'Personal Use & Hygiene', 'pct': 0.0, 'act': 0.0},
-    {'name': 'School Supplies & Fees', 'pct': 0.0, 'act': 0.0},
-    {'name': 'Recreation & Leisure', 'pct': 0.0, 'act': 0.0},
-    {'name': 'Utilities & Load', 'pct': 0.0, 'act': 0.0},
+    {'name': 'Food & Dining', 'pct': 0.0},
+    {'name': 'Transportation', 'pct': 0.0},
+    {'name': 'Personal Use & Hygiene', 'pct': 0.0},
+    {'name': 'School Supplies & Academic Fees', 'pct': 0.0},
+    {'name': 'Recreation & Leisure', 'pct': 0.0},
+    {'name': 'Utilities & Load', 'pct': 0.0},
   ];
+
+  List<Map<String, dynamic>> get _enrichedCategories {
+    final expenses = context.watch<ExpenseProvider>().expenses;
+
+    return _categories.map((cat) {
+      double totalActual = expenses.where((tx) {
+        return (tx['categories']?['category_name'] ?? '') == cat['name'];
+      }).fold(0.0, (sum, tx) {
+        return sum + (double.tryParse(tx['expense_amount'].toString()) ?? 0.0);
+      });
+
+      return {
+        ...cat,
+        'act': totalActual,
+      };
+    }).toList();
+  }
 
   final Map<String, TextEditingController> _controllers = {};
 
   @override
   void initState() {
     super.initState();
-    // Fetch data from DB on load
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<GoalProvider>().fetchGoal();
       context.read<WalletProvider>().fetchWallets();
+      context.read<ExpenseProvider>().refresh();
     });
     for (var cat in _categories) {
       _controllers[cat['name']] = TextEditingController(text: (cat['pct'] ?? 0.0).toString());
@@ -93,8 +111,8 @@ class _BudgetPageState extends State<BudgetPage> {
   }
 
   void _showAddSavingsDialog() {
-    final walletProv = context.read<WalletProvider>(); // Get WalletProvider
-    final goalProv = context.read<GoalProvider>();     // Get GoalProvider
+    final walletProv = context.read<WalletProvider>(); 
+    final goalProv = context.read<GoalProvider>();     
     TextEditingController amountController = TextEditingController();
     Map<String, dynamic>? selectedWallet;
 
@@ -121,7 +139,6 @@ class _BudgetPageState extends State<BudgetPage> {
                   labelText: "Select Wallet",
                   labelStyle: TextStyle(color: AppColors.secondaryText),
                 ),
-                initialValue: selectedWallet,
                 items: walletProv.wallets.map((w) => DropdownMenuItem<Map<String, dynamic>>(value: w, child: Text(w['wallet_name'] ?? 'Unnamed Wallet'))).toList(),
                 onChanged: (val) => setDialogState(() => selectedWallet = val),
               ),
@@ -133,13 +150,9 @@ class _BudgetPageState extends State<BudgetPage> {
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.navGreen),
               onPressed: () async {
                 final amount = double.tryParse(amountController.text) ?? 0.0;
-
                 if (amount > 0 && selectedWallet != null) {
-                  // STEP 1: Update Savings Goal in DB
                   await goalProv.addSavings(amount);
-
-                  // STEP 2: Deduct from selected Wallet in DB
-                  await walletProv.deductMoney(
+                  await walletProv.addMoney(
                     selectedWallet!['wallet_id'].toString(),
                     (selectedWallet!['wallet_balance'] as num).toDouble(),
                     amount,
@@ -228,12 +241,16 @@ class _BudgetPageState extends State<BudgetPage> {
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.navGreen),
                   onPressed: () {
-                    if (!isOverBudget) {
-                      setState(() => _isBudgetSet = true);
-                      Navigator.pop(context);
-                    }
-                  },
-                  child: Text("Apply Budget", style: TextStyle(color: Colors.white.withValues(alpha: isOverBudget ? 0.5 : 1.0), fontWeight: FontWeight.bold)),
+                      if (!isOverBudget) {
+                        final budgetProv = context.read<BudgetProvider>();
+                        for (var cat in _categories) {
+                          budgetProv.updateCategoryPct(cat['name'], cat['pct']);
+                        }
+                        budgetProv.setBudgetActive(true);
+                        Navigator.pop(context);
+                      }
+                    },
+                  child: const Text("Apply Budget", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ],
             );
@@ -244,32 +261,41 @@ class _BudgetPageState extends State<BudgetPage> {
   }
 
   List<PieChartSectionData> _getSections(bool isExpected) {
-    final List<Color> chartColors = [AppColors.buttonBlue, AppColors.navOrange, AppColors.navGreen, Colors.purple, Colors.amber, Colors.cyan];
-    double totalActual = _categories.fold(0, (sum, item) => sum + (item['act'] ?? 0.0));
+  final List<Color> chartColors = [AppColors.buttonBlue, AppColors.navOrange, AppColors.navGreen, Colors.purple, Colors.amber, Colors.cyan];
+  final categories = _enrichedCategories;
 
-    if (!isExpected && totalActual == 0) {
-      return [PieChartSectionData(color: Colors.grey.shade300, value: 1, title: '', radius: 50)];
+  double totalSpent = categories.fold(0, (sum, item) => sum + (item['act'] as double));
+
+  return categories.asMap().entries.map((entry) {
+    int index = entry.key;
+    var cat = entry.value;
+    
+    double value = isExpected 
+        ? (_spendableAmount * ((cat['pct'] ?? 0.0) / 100)) 
+        : (cat['act'] ?? 0.0).toDouble();               
+
+    double displayPct = 0;
+    if (isExpected) {
+      displayPct = (cat['pct'] ?? 0.0);
+    } else {
+      displayPct = totalSpent > 0 ? (value / totalSpent * 100) : 0;
     }
 
-    return _categories.asMap().entries.map((entry) {
-      int index = entry.key;
-      var cat = entry.value;
-      double value = isExpected ? (_spendableAmount * ((cat['pct'] ?? 0.0) / 100)) : (cat['act'] ?? 0.0).toDouble();
-      double displayPct = isExpected ? (cat['pct'] ?? 0.0) : (_spendableAmount > 0 ? (value / _spendableAmount * 100) : 0);
-
-      return PieChartSectionData(
-        color: chartColors[index % chartColors.length],
-        value: value > 0 ? value : 0.001, 
-        title: displayPct > 5 ? '${displayPct.toStringAsFixed(1)}%' : '',
-        radius: 50,
-        titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
-      );
-    }).toList();
-  }
+    return PieChartSectionData(
+      color: chartColors[index % chartColors.length],
+      value: value > 0 ? value : 0.001, 
+      title: displayPct > 5 ? '${displayPct.toStringAsFixed(1)}%' : '',
+      radius: 50,
+      titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+    );
+  }).toList();
+}
 
   @override
   Widget build(BuildContext context) {
+    final budgetProv = context.watch<BudgetProvider>(); 
     final goalProv = context.watch<GoalProvider>();
+    _isBudgetSet = budgetProv.isBudgetSet;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: const CustomNavBar(currentPage: 'BUDGET'),
@@ -302,34 +328,8 @@ class _BudgetPageState extends State<BudgetPage> {
     );
   }
 
-  Widget _buildTotalSavedCard(double total) {
-    return Container(
-      width: double.infinity, padding: const EdgeInsets.all(20), decoration: _cardDecoration(),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Total Amount Saved', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText, fontSize: 16)),
-        const SizedBox(height: 12),
-        Text('₱${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.buttonBlue)),
-        const SizedBox(height: 4),
-        const Text('Cumulative savings', style: TextStyle(fontSize: 11, color: AppColors.secondaryText)),
-      ]),
-    );
-  }
-
-  Widget _buildHeaderActions() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const Text('Budget Allocation', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
-        ElevatedButton(
-          onPressed: _showSetBudgetDialog,
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.navFocus, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-          child: const Text('Set Budget', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        ),
-      ],
-    );
-  }
-
   Widget _buildBudgetSection() {
+    final categories = _enrichedCategories;
     return Container(
       padding: const EdgeInsets.all(20), decoration: _cardDecoration(),
       child: Table(
@@ -338,7 +338,7 @@ class _BudgetPageState extends State<BudgetPage> {
         border: TableBorder(horizontalInside: BorderSide(color: Colors.grey.shade200, width: 1)),
         children: [
           _buildTableRow(['Category', '% Allocated', 'Expected', 'Actual', 'Difference'], isHeader: true),
-          ..._categories.map((cat) {
+          ...categories.map((cat) {
             double expected = _spendableAmount * ((cat['pct'] ?? 0.0) / 100);
             double actual = (cat['act'] ?? 0.0).toDouble();
             double diff = expected - actual;
@@ -354,7 +354,7 @@ class _BudgetPageState extends State<BudgetPage> {
       ),
     );
   }
-
+  
   Widget _buildAllocationCharts() {
     return Container(
       padding: const EdgeInsets.all(24), decoration: _cardDecoration(),
@@ -395,6 +395,32 @@ class _BudgetPageState extends State<BudgetPage> {
         const SizedBox(height: 4),
         Text('Cash (₱${_currentPhysicalCash.toStringAsFixed(2)}) - Savings Goal (₱${target.toStringAsFixed(2)})', 
                 style: const TextStyle(fontSize: 11, color: AppColors.secondaryText)),      ]),
+    );
+  }
+  Widget _buildTotalSavedCard(double total) {
+    return Container(
+      width: double.infinity, padding: const EdgeInsets.all(20), decoration: _cardDecoration(),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Total Amount Saved', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryText, fontSize: 16)),
+        const SizedBox(height: 12),
+        Text('₱${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.buttonBlue)),
+        const SizedBox(height: 4),
+        const Text('Cumulative savings', style: TextStyle(fontSize: 11, color: AppColors.secondaryText)),
+      ]),
+    );
+  }
+
+  Widget _buildHeaderActions() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Text('Budget Allocation', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.primaryText)),
+        ElevatedButton(
+          onPressed: _showSetBudgetDialog,
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.navFocus, padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+          child: const Text('Set Budget', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        ),
+      ],
     );
   }
 
