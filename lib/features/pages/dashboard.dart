@@ -616,7 +616,7 @@ class _DashboardPageState extends State<DashboardPage> {
       crossAxisAlignment: CrossAxisAlignment.center,      
       children: [
         const Text(
-          'Hello, User!',
+          'Hello, Iskolar!',
           style: TextStyle(
             fontSize: 40,
             fontWeight: FontWeight.bold,
